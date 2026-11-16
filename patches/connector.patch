@@ -1,0 +1,230 @@
+--- a/store.py
++++ b/store.py
+@@ -51,8 +51,16 @@
+     if m and t.get('month'): return f"{t['month'][:4]}-{int(m[1]):02d}-{int(m[2]):02d}"
+     return None
+ 
++def clean_requirements(value):
++    """把明确传入的制作要求收成字符串或 None。None 不在这里表示「不修改」。"""
++    if not isinstance(value, str): raise ValueError('具体制作要求须为文字')
++    text = value.replace('\r\n', '\n').strip()
++    if len(text) > 4000: raise ValueError('具体制作要求请少于 4000 字')
++    return text or None
++
+ def brief(t, events_for=None):
+     r = {'id': t['id'], '标题': t['title'], '完成': bool(t['done']), '说明': t.get('note') or ''}
++    if t.get('requirements'): r['具体制作要求'] = t['requirements']
+     for k, n in (('plan', '计划日'), ('originalPlan', '原计划'), ('deadline', '交付'), ('completed', '完成日'), ('next', '下一步'), ('dateText', '日期'), ('month', '月份')):
+         if t.get(k): r[n] = t[k]
+     if t.get('urgent'): r['急'] = True
+@@ -123,7 +131,7 @@
+         if plan_from and not (t.get('plan') and t['plan'] >= plan_from): continue
+         if plan_to and not (t.get('plan') and t['plan'] <= plan_to): continue
+         if keyword:
+-            hay = ' '.join(str(t.get(k) or '') for k in ('title', 'note', 'next', 'dateText')) + ' '.join(e['text'] for e in t.get('events') or [])
++            hay = ' '.join(str(t.get(k) or '') for k in ('title', 'note', 'next', 'dateText', 'requirements')) + ' '.join(e['text'] for e in t.get('events') or [])
+             if keyword.lower() not in hay.lower(): continue
+         out.append(t)
+     out.sort(key=lambda t: (t.get('sortDay') or t.get('plan') or t.get('month') or '', t['id']))
+@@ -158,7 +166,7 @@
+     if t.get('plan') != d: msg += f"；注意计划日是 {t.get('plan') or '未定'}，所以不会出现在 {d} 的今天栏，会出现在本周已完成"
+     return t, msg
+ 
+-def m_add_task(data, title, plan=None, deadline=None, note=None, next_step=None, date_text=None, month=None, urgent=False, src=None):
++def m_add_task(data, title, plan=None, deadline=None, note=None, next_step=None, date_text=None, month=None, urgent=False, src=None, requirements=None):
+     title = (title or '').strip()
+     if not title: raise ValueError('请填写任务名称')
+     td = today()
+@@ -173,7 +181,8 @@
+          'plan': plan, 'week': monday(plan or td), 'originalPlan': None, 'deadline': deadline,
+          'next': (next_step or '').strip() or None, 'monthNotes': [], 'stages': None, 'shoot': None, 'initial': None,
+          'events': [], 'history': [], 'urgent': bool(urgent), 'src': src or 'Ke口述（连接器）',
+-         'recordDay': td, 'sortDay': deadline or plan or td, 'handover': None}
++         'recordDay': td, 'sortDay': deadline or plan or td, 'handover': None,
++         'requirements': clean_requirements(requirements) if requirements is not None else None}
+     data['tasks'].append(t)
+     if t['note']: _event(data, t, td, f"{cn(td)}新增：{t['note']}", False)
+     return t, f"已新增任务 {nid}「{title}」" + (f"，排在 {plan}" if plan else '，未定日期（放进本周待安排）')
+@@ -189,9 +198,10 @@
+     if reason: _event(data, t, today(), f"{cn(today())}改期：{old or '未定'} → {np_}。{reason.strip()}", False)
+     return t, f"已把「{t['title']}」从 {old or '未定'} 改到 {np_}（原计划保留为 {t.get('originalPlan') or '无'}）"
+ 
+-def m_update_note(data, task, note=None, next_step=None, deadline=None, date_text=None, title=None, urgent=None):
++def m_update_note(data, task, note=None, next_step=None, deadline=None, date_text=None, title=None, urgent=None, requirements=None):
+     t = find_task(data, task); ch = []
+     if note is not None: t['note'] = note.strip(); ch.append('说明')
++    if requirements is not None: t['requirements'] = clean_requirements(requirements); ch.append('具体制作要求')
+     if next_step is not None: t['next'] = next_step.strip() or None; ch.append('下一步')
+     if deadline is not None:
+         t['deadline'] = need_day(deadline, '交付日') if deadline.strip() else None; ch.append('交付日')
+--- a/server.py
++++ b/server.py
+@@ -24,7 +24,7 @@
+ async def get_week(day: Optional[str] = None) -> dict:
+     return await _r(store.get_week, day)
+ 
+-@mcp.tool(description='按条件列出任务。month：YYYY-MM 或 YYYY；keyword：搜标题/说明/下一步/进展；status：全部、未完成、已完成；plan_from/plan_to：计划日范围 YYYY-MM-DD；include_hidden：是否含隐藏记录；limit：最多返回几条（默认 50）。')
++@mcp.tool(description='按条件列出任务。month：YYYY-MM 或 YYYY；keyword：搜标题/当前说明（进度）/下一步/具体制作要求/进展；status：全部、未完成、已完成；plan_from/plan_to：计划日范围 YYYY-MM-DD；include_hidden：是否含隐藏记录；limit：最多返回几条（默认 50）。')
+ async def list_tasks(month: Optional[str] = None, keyword: Optional[str] = None, status: str = '全部',
+                      plan_from: Optional[str] = None, plan_to: Optional[str] = None,
+                      include_hidden: bool = False, limit: int = 50) -> dict:
+@@ -42,20 +42,21 @@
+ async def mark_done(task: str, day: Optional[str] = None, text: Optional[str] = None) -> dict:
+     return await _w(store.m_mark_done, task, day, text)
+ 
+-@mcp.tool(description='新增一条任务（写操作，会自动发布）。编号自动取今年最大编号+1。plan：计划日 YYYY-MM-DD（排进那天的今天栏）；不填则放进本周待安排；deadline：交付/截止日；note：当前说明；next_step：下一步；date_text：网页上显示的日期文字（默认「X月X日」）；month：归档月份（默认按计划日或今天）；urgent：是否急事。')
++@mcp.tool(description='新增一条任务（写操作，会自动发布）。编号自动取今年最大编号+1。plan：计划日 YYYY-MM-DD（排进那天的今天栏）；不填则放进本周待安排；deadline：交付/截止日；note：当前说明，也就是进度，不是制作要求；requirements：具体制作要求，可选，不填则没有要求，不会从 note 复制；next_step：下一步；date_text：网页上显示的日期文字（默认「X月X日」）；month：归档月份（默认按计划日或今天）；urgent：是否急事。')
+ async def add_task(title: str, plan: Optional[str] = None, deadline: Optional[str] = None, note: Optional[str] = None,
+                    next_step: Optional[str] = None, date_text: Optional[str] = None, month: Optional[str] = None,
+-                   urgent: bool = False) -> dict:
+-    return await _w(store.m_add_task, title, plan, deadline, note, next_step, date_text, month, urgent)
++                   urgent: bool = False, requirements: Optional[str] = None) -> dict:
++    return await _w(store.m_add_task, title, plan, deadline, note, next_step, date_text, month, urgent, requirements=requirements)
+ 
+ @mcp.tool(description='任务改期（写操作，会自动发布）。只改计划日 new_plan（YYYY-MM-DD），第一次改期时原计划日自动保留在「原计划」，以后再改也不覆盖。reason：改期原因（会记成一条进展）；date_text：可同时改网页上的日期文字。')
+ async def reschedule(task: str, new_plan: str, reason: Optional[str] = None, date_text: Optional[str] = None) -> dict:
+     return await _w(store.m_reschedule, task, new_plan, reason, date_text)
+ 
+-@mcp.tool(description='更新任务的说明和其他字段（写操作，会自动发布）。只改填了的项：note 当前说明、next_step 下一步、deadline 交付日（传空字符串清除）、date_text 日期文字、title 标题、urgent 是否急事。')
++@mcp.tool(description='更新任务的说明和其他字段（写操作，会自动发布）。只改填了的项：note 当前说明（进度），requirements 具体制作要求（不填表示不改，传空字符串表示清除；不会改动 note），next_step 下一步、deadline 交付日（传空字符串清除）、date_text 日期文字、title 标题、urgent 是否急事。')
+ async def update_note(task: str, note: Optional[str] = None, next_step: Optional[str] = None, deadline: Optional[str] = None,
+-                      date_text: Optional[str] = None, title: Optional[str] = None, urgent: Optional[bool] = None) -> dict:
+-    return await _w(store.m_update_note, task, note, next_step, deadline, date_text, title, urgent)
++                      date_text: Optional[str] = None, title: Optional[str] = None, urgent: Optional[bool] = None,
++                      requirements: Optional[str] = None) -> dict:
++    return await _w(store.m_update_note, task, note, next_step, deadline, date_text, title, urgent, requirements)
+ 
+ @mcp.tool(description='核对线上网页是否已经是最新版本（比较本地生成的网页和 GitHub Pages 上的内容）。')
+ async def check_online() -> dict:
+--- /dev/null
++++ b/store_requirements_test.py
+@@ -0,0 +1,129 @@
++"""合成数据测试连接器读写。不读取、不修改真实 data.json，不调用 mutate，不发布。"""
++import copy, json, os, sys, tempfile, unittest
++from pathlib import Path
++
++ROOT = Path(tempfile.mkdtemp(prefix='lg-store-'))
++(ROOT / 'build').mkdir()
++(ROOT / 'restore' / 'src').mkdir(parents=True)
++REQ = '第一行\n第二行 <b>不是标签</b> 中文「要求」&</script>'
++BASE = {
++    'version': 'synthetic',
++    'tasks': [
++        {
++            'id': 20260001, 'title': '合成甲', 'month': '2026-11', 'hidden': False,
++            'dateText': '11月16日', 'done': False, 'note': '进度甲', 'plan': '2026-11-16',
++            'week': '2026-11-16', 'originalPlan': None, 'deadline': None, 'next': '下一步甲',
++            'monthNotes': [], 'stages': None, 'shoot': None, 'initial': '不应返回',
++            'events': [{'seq': 1, 'day': '2026-11-13', 'text': '进展甲', 'done': False}],
++            'history': [], 'urgent': False, 'src': 'synthetic', 'recordDay': '2026-11-16',
++            'sortDay': '2026-11-16', 'handover': None, 'requirements': REQ,
++        },
++        {
++            'id': 20250001, 'title': '合成旧档', 'month': '2025-12', 'hidden': False,
++            'dateText': '12月1日', 'done': True, 'note': '旧进度', 'plan': '2025-12-01',
++            'week': '2025-12-01', 'originalPlan': None, 'deadline': None, 'next': None,
++            'monthNotes': [], 'stages': None, 'shoot': None, 'initial': '旧初始',
++            'events': [], 'history': [], 'urgent': False, 'src': 'synthetic',
++            'recordDay': '2025-12-01', 'sortDay': '2025-12-01', 'handover': None,
++        },
++    ],
++    'social': [],
++    'platforms': [],
++}
++(ROOT / 'build' / 'data.json').write_text(json.dumps(BASE, ensure_ascii=False), encoding='utf-8')
++os.environ['LANGUI_ROOT'] = str(ROOT)
++os.environ['LANGUI_PUBLISH'] = '0'
++os.environ['LANGUI_TODAY'] = '2026-11-16'
++os.environ['LANGUI_STORE_BACKUP'] = ''
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++import store
++
++
++def task(data, tid):
++    return next(t for t in data['tasks'] if t['id'] == tid)
++
++
++class RequirementsStoreTest(unittest.TestCase):
++    def test_reads_do_not_invent_requirements_for_old_rows(self):
++        old = store.get_task('20250001')
++        self.assertNotIn('requirements', old)
++        self.assertNotIn('src', old)
++        self.assertNotIn('initial', old)
++        self.assertEqual(old['note'], '旧进度')
++        brief = store.list_tasks(keyword='旧进度')['任务']
++        self.assertEqual(len(brief), 1)
++        self.assertNotIn('具体制作要求', brief[0])
++        self.assertEqual(brief[0]['说明'], '旧进度')
++
++    def test_list_get_day_week_search_requirements_without_mixing_note(self):
++        found = store.list_tasks(keyword='中文「要求」')['任务']
++        self.assertEqual([t['id'] for t in found], [20260001])
++        self.assertEqual(found[0]['具体制作要求'], REQ)
++        self.assertEqual(found[0]['说明'], '进度甲')
++        self.assertEqual(found[0]['下一步'], '下一步甲')
++        self.assertFalse(store.list_tasks(keyword='不存在的要求词')['任务'])
++        day = store.get_day('2026-11-16')
++        self.assertEqual(day['今天栏_待做'][0]['具体制作要求'], REQ)
++        self.assertEqual(day['今天栏_待做'][0]['说明'], '进度甲')
++        week = store.get_week('2026-11-16')
++        ids = [t['id'] for t in week['本周排期']]
++        self.assertIn(20260001, ids)
++        self.assertTrue(any(t.get('具体制作要求') == REQ for t in week['本周排期']))
++
++    def test_add_update_progress_reschedule_and_done_keep_boundaries(self):
++        data = copy.deepcopy(BASE)
++        created, _ = store.m_add_task(data, '合成新任务', plan='2026-11-18', note='新进度', next_step='新下一步',
++                                      requirements='第一行\r\n第二行')
++        self.assertEqual(created['requirements'], '第一行\n第二行')
++        self.assertEqual(created['note'], '新进度')
++        self.assertEqual(created['events'][0]['text'], '11月16日新增：新进度')
++        self.assertNotIn('第一行', created['events'][0]['text'])
++        blank, _ = store.m_add_task(data, '合成无要求', plan='2026-11-18', note='只有进度')
++        self.assertIsNone(blank['requirements'])
++        self.assertEqual(blank['note'], '只有进度')
++        store.m_update_note(data, created['id'], note='进度已改')
++        self.assertEqual(created['note'], '进度已改')
++        self.assertEqual(created['requirements'], '第一行\n第二行')
++        self.assertEqual(len(created['events']), 1)
++        store.m_update_note(data, created['id'], requirements='要求已改')
++        self.assertEqual(created['requirements'], '要求已改')
++        self.assertEqual(created['note'], '进度已改')
++        store.m_add_progress(data, created['id'], '追加进展', '2026-11-16', False)
++        self.assertEqual(created['requirements'], '要求已改')
++        self.assertEqual(created['note'], '进度已改')
++        self.assertEqual(created['events'][-1]['text'], '追加进展')
++        store.m_reschedule(data, created['id'], '2026-11-20', reason='改期原因')
++        self.assertEqual(created['plan'], '2026-11-20')
++        self.assertEqual(created['requirements'], '要求已改')
++        self.assertEqual(created['note'], '进度已改')
++        store.m_mark_done(data, created['id'], '2026-11-20', '完成记录')
++        self.assertTrue(created['done'])
++        self.assertEqual(created['requirements'], '要求已改')
++        self.assertEqual(created['note'], '进度已改')
++        store.m_update_note(data, created['id'], requirements='   ')
++        self.assertIsNone(created['requirements'])
++        self.assertEqual(created['note'], '进度已改')
++        untouched = task(data, 20260001)
++        self.assertEqual(untouched['requirements'], REQ)
++        self.assertEqual(untouched['note'], '进度甲')
++
++    def test_missing_requirements_argument_does_not_clear(self):
++        data = copy.deepcopy(BASE)
++        before = task(data, 20260001)['requirements']
++        store.m_update_note(data, 20260001, next_step='只改下一步')
++        self.assertEqual(task(data, 20260001)['requirements'], before)
++        self.assertEqual(task(data, 20260001)['note'], '进度甲')
++        self.assertEqual(task(data, 20260001)['next'], '只改下一步')
++        with self.assertRaises(ValueError):
++            store.m_update_note(data, 20260001)
++        with self.assertRaises(ValueError):
++            store.clean_requirements('x' * 4001)
++
++    def test_disk_roundtrip_keeps_old_shape(self):
++        raw = json.loads((ROOT / 'build' / 'data.json').read_text(encoding='utf-8'))
++        self.assertNotIn('requirements', raw['tasks'][1])
++        self.assertEqual(raw['tasks'][0]['requirements'], REQ)
++
++
++if __name__ == '__main__':
++    unittest.main(verbosity=2)
