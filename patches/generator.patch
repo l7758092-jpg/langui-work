@@ -1,0 +1,453 @@
+--- a/restore/src/app.js
++++ b/restore/src/app.js
+@@ -1,3 +1,4 @@
++
+ /* LanGui 专业工作库 —— 按旧站（ChatGPT Sites 版 site-edit）源码逐项移植的离线单文件版。
+    旧站：page.tsx / work-controls.tsx / month-ledger.tsx / social-media.tsx / year-navigation.tsx / lib/*.ts
+    服务器数据库（D1）→ 内置 data.json + 浏览器 localStorage 覆盖层（只存改动）。 */
+@@ -18,6 +19,27 @@
+ function shift(day, n){ var d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+ function monday(day){ return shift(day, -((new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7)); }
+ function validDate(s){ if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false; var d = new Date(s + 'T00:00:00Z'); return isFinite(+d) && d.toISOString().slice(0,10) === s; }
++function weekendShanghai(day){
++  if (!validDate(day)) return false;
++  var name = new Intl.DateTimeFormat('en-US', {timeZone:'Asia/Shanghai', weekday:'short'}).format(new Date(day + 'T12:00:00+08:00'));
++  return name === 'Sat' || name === 'Sun';
++}
++function formatShanghai(day){
++  return new Intl.DateTimeFormat('zh-CN', {timeZone:'Asia/Shanghai', year:'numeric', month:'long', day:'numeric', weekday:'long'}).format(new Date(day + 'T00:00:00+08:00'));
++}
++function monthParam(value){ return /^\d{4}-(00|0[1-9]|1[0-2])$/.test(value || '') ? value : ''; }
++function archiveMonth(){
++  var mq = monthParam(params().get('month'));
++  if (mq) return mq;
++  var wq = params().get('week');
++  if (validDate(wq)) return wq.slice(0,7);
++  return M.today.slice(0,7);
++}
++function weekForMonth(month, today){
++  if (month === today.slice(0,7)) return monday(today);
++  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)){ var first = month + '-01'; return shift(first, (8 - new Date(first + 'T00:00:00Z').getUTCDay()) % 7); }
++  return monday(today);
++}
+ function bucket(row, start, today){
+   var end = shift(start, 6), day = row.planned || row.week;
+   if (!day) return '';
+@@ -65,7 +87,7 @@
+   data.tasks.forEach(function(t){
+     db.work.push({ id: t.id, month: t.month || (String(t.id).slice(0,4) + '-00'), date: t.dateText || '', title: t.title, progress: t.note || '', done: !!t.done,
+       project: t.project || null, category: t.category || null, planned: t.plan || null, week: t.week || null, originalPlan: t.originalPlan || null,
+-      completed: t.completed || null, nextStep: t.next || null, review: t.review || null });
++      completed: t.completed || null, nextStep: t.next || null, review: t.review || null, requirements: t.requirements || null });
+     (t.events || []).forEach(function(e){ db.events.push({ id: e.seq, taskId: t.id, day: e.day, progress: e.text, done: !!e.done, review: null, waiting: null, followUp: null }); });
+     if (t.monthNotes && t.monthNotes.length) db.snapshots[t.id] = t.monthNotes[0];
+     if (t.urgent) db.priorities[t.id] = true;
+@@ -123,7 +145,13 @@
+ function currentDb(){
+   var db = baseDb(BASE);
+   var ids = {}; db.work.forEach(function(w, i){ ids[w.id] = i; });
+-  Object.keys(saved.work).forEach(function(id){ var w = saved.work[id]; if (id in ids) db.work[ids[id]] = clone(w); else db.work.push(clone(w)); });
++  Object.keys(saved.work).forEach(function(id){
++    var src = saved.work[id], w = clone(src);
++    if (id in ids) {
++      if (!Object.prototype.hasOwnProperty.call(src, 'requirements')) w.requirements = db.work[ids[id]].requirements || null;
++      db.work[ids[id]] = w;
++    } else db.work.push(w);
++  });
+   db.events = db.events.concat(clone(saved.addedEvents));
+   Object.keys(saved.priorities).forEach(function(id){ if (saved.priorities[id]) db.priorities[id] = true; else delete db.priorities[id]; });
+   Object.keys(saved.deadlines).forEach(function(id){ if (saved.deadlines[id]) db.deadlines[id] = saved.deadlines[id]; else delete db.deadlines[id]; });
+@@ -151,7 +179,7 @@
+   var sch = scheduleUpdate(old, planned || null, week || (!old && !planned ? monday(today) : null));
+   var changes = { title: title, month: month || (old && old.month) || today.slice(0,7), date: value('date') || (old ? '' : today), progress: value('progress'), done: data.done === true,
+     project: value('project') || null, category: value('category') || null, planned: sch.planned, week: sch.week, originalPlan: sch.originalPlan,
+-    completed: completed || null, nextStep: value('nextStep', 1000) || null, review: review || null };
++    completed: completed || null, nextStep: value('nextStep', 1000) || null, review: review || null, requirements: value('requirements', 4000) || null };
+   var nextEventId = function(){ return db.events.concat(saved.addedEvents).reduce(function(m, e){ return Math.max(m, e.id); }, 0) + 1; };
+   var addEvent = function(e){ e.id = nextEventId(); db.events.push(e); saved.addedEvents.push(e); };
+   if (old){
+@@ -205,6 +233,7 @@
+   var projects = uniq(rows.filter(function(r){ return r.project; }).map(function(r){ return r.project; })).sort();
+   var years = uniq(months.map(function(v){ return v.slice(0,4); })).sort().reverse();
+   var yearTargets = years.map(function(y){
++    if (y === today.slice(0,4)) return { year: y, month: today.slice(0,7) };
+     var found = null; months.forEach(function(k){ if (k.indexOf(y) === 0 && !/-00$/.test(k) && rows.some(function(r){ return r.month === k; })) found = k; });
+     return { year: y, month: found || y + '-01' };
+   });
+@@ -237,9 +266,11 @@
+   var view = activeView(), home = homeRequested();
+   document.querySelector('main.ledger').classList.toggle('planner-home', home);
+   $('years').innerHTML = yearNav();
+-  $('brandDate').textContent = new Intl.DateTimeFormat('zh-CN', {timeZone:'Asia/Shanghai', year:'numeric', month:'long', day:'numeric', weekday:'long'}).format(new Date(M.today + 'T00:00:00+08:00'));
++  var archiveYear = archiveMonth().slice(0,4);
++  $('brandDate').textContent = '今天 · ' + formatShanghai(M.today);
+   $('brandDate').setAttribute('datetime', M.today);
+-  $('total').textContent = M.rows.length;
++  $('total').textContent = M.rows.filter(function(r){ return (r.month || '').slice(0,4) === archiveYear; }).length;
++  $('totalLabel').textContent = archiveYear + '年工作记录';
+   $('hudTc').textContent = M.today.replace(/-/g, '.');
+   document.querySelectorAll('.workspace-switch button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.view === view)); });
+   var key = view + '|' + location.search;
+@@ -257,11 +288,12 @@
+   var p = params();
+   if (!p.has('month') || p.get('view') === 'home') p.set('view', 'home');
+   p.set('month', month);
++  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) p.set('week', weekForMonth(month, M.today));
+   ['q', 'status', 'project', 'category'].forEach(function(k){ p.delete(k); });
+   return '?' + p.toString();
+ }
+ function yearNav(){
+-  var y = (params().get('month') || '').slice(0,4) || INITIAL_SELECTED.slice(0,4);
++  var y = archiveMonth().slice(0,4);
+   return M.yearTargets.map(function(t){ return '<a href="' + esc(yearTargetHref(t.month)) + '" data-nav="year" data-month="' + t.month + '"' + (y === t.year ? ' aria-current="page"' : '') + '>' + t.year + '年</a>'; }).join('');
+ }
+ 
+@@ -288,7 +320,7 @@
+ function weekly(view, home){
+   var rows = M.rows, today = M.today;
+   var wq = params().get('week');
+-  var week = wq && /^\d{4}-\d{2}-\d{2}$/.test(wq) && isFinite(Date.parse(wq)) ? wq : (location.hash === '#week' ? monday(today) : INITIAL_WEEK);
++  var week = validDate(wq) ? wq : weekForMonth(archiveMonth(), today);
+   var end = shift(week, 6);
+   var inWeek = function(d){ return d >= week && d <= end; };
+   var currentWeek = monday(today);
+@@ -355,6 +387,7 @@
+       '<h4>' + esc(r.title) + '</h4>' + (r.videoStage ? videoStageLine(r.videoStage) : '') +
+       (r.project ? archiveLink('?project=' + encodeURIComponent(r.project) + '#archive', esc(r.project)) : '') +
+       (last && last.waiting ? '<p>等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p>下次跟进：' + esc(last.followUp) + '</p>' : '') +
++      (r.requirements ? '<div class="planner-requirements"><span>具体制作要求</span><p>' + esc(r.requirements) + '</p></div>' : '') +
+       '<div class="planner-progress"><span>当前进度</span><p>' + esc(r.progress || (r.done ? '已完成' : '未填写进度')) + '</p></div>' +
+       (r.nextStep ? '<div class="planner-next"><span>下一步</span><p>' + esc(r.nextStep) + '</p></div>' : '') +
+       (isUpdate && r.planned ? '<p class="planner-original">' + (r.date.indexOf('交付') >= 0 ? '计划交付：' : '当前计划：') + r.planned + '</p>' : '') +
+@@ -380,10 +413,21 @@
+           return '<li><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
+     }).join('') + '</div></section>';
+     out += '<section class="planner-group planner-week-schedule"><h3>本周排期 <small>' + dated.length + ' 项</small></h3>' + (dated.length ? '<ul class="planner-grid">' + dated.map(show).join('') + '</ul>' : '<p class="planner-empty">暂无排期</p>') + '</section>';
+-    out += '<section class="planner-group planner-today"><h3>今天 <small>' + today.slice(5).replace('-', '/') + ' · ' + todayItems.length + ' 项</small></h3>' + (todayItems.length ? '<ul class="daily-list">' + todayItems.map(function(it){
+-      return '<li><strong>' + esc(it.title) + '</strong>' + (it.planned ? '<span class="daily-kind">今日安排</span>' : '') + (it.completed ? '<span class="daily-kind">已完成</span>' : '') + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>') + '</section>';
+-    out += '<section class="planner-group planner-yesterday"><h3>昨天做了什么 <small>' + yesterday.slice(5).replace('-', '/') + ' · ' + yesterdayItems.length + ' 项</small></h3>' + (yesterdayItems.length ? '<ul class="yesterday-list">' + yesterdayItems.map(function(it){
+-      return '<li><strong>' + esc(it.title) + '</strong>' + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">昨天暂无工作记录</p>') + '</section>';
++    var liveYear = archiveMonth().slice(0,4) === today.slice(0,4);
++    var todayBody = todayItems.length ? '<ul class="daily-list">' + todayItems.map(function(it){
++      return '<li><strong>' + esc(it.title) + '</strong>' + (it.planned ? '<span class="daily-kind">今日安排</span>' : '') + (it.completed ? '<span class="daily-kind">已完成</span>' : '') + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
++    var yesterdayBody = yesterdayItems.length ? '<ul class="yesterday-list">' + yesterdayItems.map(function(it){
++      return '<li><strong>' + esc(it.title) + '</strong>' + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
++    var todayMeta = today.slice(5).replace('-', '/') + ' · ' + todayItems.length + ' 项';
++    var yesterdayMeta = yesterday.slice(5).replace('-', '/') + ' · ' + yesterdayItems.length + ' 项';
++    if (!liveYear){
++      todayMeta = '不随档案年变化';
++      yesterdayMeta = '不随档案年变化';
++      todayBody = '<p class="planner-empty">今天是' + formatShanghai(today) + '</p>';
++      yesterdayBody = '<p class="planner-empty">所选' + archiveMonth().slice(0,4) + '年档案，与今天分开</p>';
++    }
++    out += '<section class="planner-group planner-today"><h3>今天 <small>' + todayMeta + '</small></h3>' + todayBody + '</section>';
++    out += '<section class="planner-group planner-yesterday"><h3>昨天做了什么 <small>' + yesterdayMeta + '</small></h3>' + yesterdayBody + '</section>';
+     out += '</div></section>';
+   }
+   if (view === 'weekly-record'){
+@@ -440,15 +484,14 @@
+ function description(v){ var t = (v || '').trim(); return /^(?:已完成|完成|\d+(?:\.\d+)?%?)$/.test(t) ? '' : t; }
+ function monthLabel(v){ return /-00$/.test(v) ? v.slice(0,4) + '年 · 月份待核' : v.slice(0,4) + '年' + Number(v.slice(5)) + '月'; }
+ function ledgerSelection(){
+-  var p = params(), mq = p.get('month');
+-  var month = mq && M.months.indexOf(mq) >= 0 ? mq : (mq || INITIAL_SELECTED);
+-  if (M.months.indexOf(month) < 0) month = INITIAL_SELECTED;
+-  return { month: month, crossMonth: !p.has('month'), filters: { q: p.get('q') || '', status: p.get('status') || '', project: p.get('project') || '', category: p.get('category') || '' } };
++  var p = params();
++  return { month: archiveMonth(), crossMonth: !p.has('month'), filters: { q: p.get('q') || '', status: p.get('status') || '', project: p.get('project') || '', category: p.get('category') || '' } };
+ }
+ function ledgerChangeUrl(month, filters, embedded){
+   var url = new URL(location.href);
+   url.searchParams.set('month', month);
+   ['q', 'status', 'project', 'category'].forEach(function(k){ if (filters[k]) url.searchParams.set(k, filters[k]); else url.searchParams.delete(k); });
++  if (!(filters && (filters.q || filters.status || filters.project || filters.category)) && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) url.searchParams.set('week', weekForMonth(month, M.today));
+   if (homeRequested()) url.searchParams.set('view', 'home');
+   else if (url.searchParams.get('view') === 'home') url.searchParams.delete('view');
+   return url;
+@@ -460,18 +503,20 @@
+   var categories = uniq(M.rows.filter(function(r){ return r.category; }).map(function(r){ return r.category; })).sort();
+   var query = f.q.trim().toLowerCase();
+   var visible = ledgerSchedule((f.project && !month ? M.ledgerEntries : entries).filter(function(e){ var row = e.row;
+-    return (!query || (row.title + ' ' + row.progress + ' ' + (row.project || '')).toLowerCase().indexOf(query) >= 0) && (!f.project || row.project === f.project) && (!f.category || row.category === f.category) &&
++    return (!query || (row.title + ' ' + row.progress + ' ' + (row.requirements || '') + ' ' + (row.project || '')).toLowerCase().indexOf(query) >= 0) && (!f.project || row.project === f.project) && (!f.category || row.category === f.category) &&
+       (f.status === 'done' ? row.done : f.status === 'open' ? !row.done : !f.status || row.progress === f.status); }));
+   var latest = {}; visible.forEach(function(e){ latest[e.row.id] = e.key; });
+-  var year = selected.slice(0,4);
++   var year = selected.slice(0,4);
++  var yearMonths = [1,2,3,4,5,6,7,8,9,10,11,12].map(function(n){ return year + '-' + String(n).padStart(2,'0'); });
++  var yearRows = M.rows.filter(function(r){ return (r.month || '').slice(0,4) === year; }).length;
+   var count = function(v){ return M.ledgerEntries.filter(function(e){ return e.month === v; }).length; };
+   var progressOptions = uniq(M.rows.map(function(r){ return r.progress; }).filter(Boolean)).filter(function(p){ return p.length <= 24 && p !== '已完成' && p !== '未标完成'; }).sort();
+   var opt = function(value, label, cur){ return '<option value="' + esc(value) + '"' + (value === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+   var o = '<h2 class="work-month-title" id="archive">月度工作记录</h2><div class="ledger-summary" aria-label="当月概览"><div class="ledger-period"><small>当前档案</small><strong>' + monthLabel(selected) + '</strong></div>' +
+     '<div><small>当月记录</small><strong>' + entries.length + '</strong></div><div><small>已完成</small><strong>' + entries.filter(function(e){ return e.row.done; }).length + '</strong></div><div><small>未标完成</small><strong>' + entries.filter(function(e){ return !e.row.done; }).length + '</strong></div></div>';
+-  o += '<div class="ledger-layout"><nav class="ledger-nav month-archive" aria-label="月份"><div class="month-archive-head"><span>月度档案</span><strong>' + year + '</strong><small>年度工作索引</small></div><div class="month-archive-groups">' +
++   o += '<div class="ledger-layout"><nav class="ledger-nav month-archive" aria-label="月份"><div class="month-archive-head"><span>月度档案</span><strong>' + year + '</strong><small>' + (yearRows ? '该年工作索引' : '该年没有工作记录') + '</small></div><div class="month-archive-groups">' +
+     [1,2,3,4].map(function(q){ return '<div class="month-quarter"><div class="month-quarter-label"><b>Q' + q + '</b><span>第' + ['一','二','三','四'][q - 1] + '季度</span></div><div class="month-tiles">' +
+-      M.months.filter(function(v){ return v.indexOf(year) === 0 && Math.ceil(Number(v.slice(5)) / 3) === q; }).map(function(v){
++      yearMonths.filter(function(v){ return Math.ceil(Number(v.slice(5)) / 3) === q; }).map(function(v){
+         return '<a href="?month=' + v + '#archive" data-nav="month" data-month="' + v + '" aria-label="' + monthLabel(v) + '，' + count(v) + '条记录"' + (v === selected ? ' aria-current="page"' : '') + '><strong>' + Number(v.slice(5)) + '<small>月</small></strong><span>' + count(v) + '<span class="month-unit"> 条</span></span></a>'; }).join('') + '</div></div>'; }).join('') +
+     M.months.filter(function(v){ return v.indexOf(year) === 0 && /-00$/.test(v); }).map(function(v){ return '<a class="month-unknown" href="?month=' + v + '#archive" data-nav="month" data-month="' + v + '"' + (v === selected ? ' aria-current="page"' : '') + '><span>月份待核</span><span>' + count(v) + ' 条</span></a>'; }).join('') + '</div></nav>';
+   o += '<section class="ledger-panel"><div class="ledger-title work-heading"><div><h2>' + (f.project && !month ? '跨月项目：' + esc(f.project) : monthLabel(selected) + '工作') + '</h2><p>' + visible.length + ' 条记录</p></div></div>';
+@@ -487,7 +532,7 @@
+         (EDIT && e.key === latest[row.id] ? ' <button class="work-link" data-edit="' + row.id + '">详情／更新</button>' : '') + '</td><td>' +
+         (description(e.progress) ? esc(description(e.progress)) : description(row.progress) ? esc(description(row.progress)) : esc(row.title) + '<small class="ledger-event">原表未记具体说明</small>') +
+         '</td><td class="ledger-completion">' + (row.done ? '<span role="img" aria-label="已完成" class="ledger-tick">✓</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+-  } else o += '<p class="ledger-empty">' + (entries.length ? '没有符合筛选条件的记录' : '原表暂未查到当月记录，待补查。') + '</p>';
++  } else o += '<p class="ledger-empty">' + (entries.length ? '没有符合筛选条件的记录' : (yearRows ? '这个月没有工作记录。' : year + '年没有工作记录。')) + '</p>';
+   o += '</section></div>';
+   return o;
+ }
+@@ -553,6 +598,8 @@
+     '<label>正在等什么<input name="waiting" value="' + v(latest && latest.waiting) + '"></label>' +
+     '<label>下次跟进日期<input type="date" name="followUp" value="' + v(latest && latest.followUp) + '"></label>' +
+     (row && row.history.length ? '<details><summary>进度历史</summary><ul>' + row.history.map(function(e){ return '<li>' + e.day + ' · ' + esc(e.progress || (e.done ? '已完成' : '—')) + '</li>'; }).join('') + '</ul></details>' : '') +
++    '<label>具体制作要求<textarea name="requirements" maxlength="4000">' + v(row && row.requirements) + '</textarea></label>' +
++    '<p class="planner-original">此栏在维护模式只保存在这台浏览器，不会写入共享工作库。系统录入以连接器为准。</p>' +
+     '<label>下一步<textarea name="nextStep" maxlength="1000">' + v(row && row.nextStep) + '</textarea></label>' +
+     '<p role="alert" id="workError"></p><button class="work-button">保存</button></form>';
+   dlg.dataset.id = row ? row.id : ''; dlg.dataset.week = week || '';
+@@ -622,8 +669,8 @@
+ }
+ document.addEventListener('change', function(e){
+   if (e.target.id === 'weekMonthSelect'){
+-    var month = e.target.value, first = month + '-01', fw = shift(first, (8 - new Date(first + 'T00:00:00Z').getUTCDay()) % 7);
+-    var url = new URL(location.href); url.searchParams.set('week', fw); if (url.searchParams.has('month')) url.searchParams.set('view', 'home'); url.hash = '';
++    var month = e.target.value;
++    var url = new URL(location.href); url.searchParams.set('month', month); url.searchParams.set('week', weekForMonth(month, M.today)); url.searchParams.set('view', 'home'); url.hash = '';
+     push(url);
+   } else if (e.target.id === 'socialMonthSelect'){
+     ui.socialMonth = e.target.value; var u = new URL(location.href); u.searchParams.set('socialMonth', e.target.value); try { history.replaceState(null, '', u); } catch (x) {} render();
+@@ -654,3 +701,4 @@
+ })();
+ window.__LG = { apiWork: apiWork, currentDb: currentDb, model: function(){ return model(); } };
+ })();
++
+--- a/restore/src/app.html
++++ b/restore/src/app.html
+@@ -124,9 +124,11 @@
+ .planner-card h4{font-size:16px;font-weight:700;margin:7px 0 8px;line-height:1.4;overflow-wrap:anywhere}
+ .planner-card>a{font-size:12px;color:var(--gold)}
+ .planner-card>p{font-size:12px;color:var(--muted)}
+-.planner-progress,.planner-next{display:grid;grid-template-columns:58px minmax(0,1fr);gap:8px;font-size:13px;line-height:1.55;margin-top:6px}
+-.planner-progress span,.planner-next span{font-size:11px;color:var(--dim);padding-top:2px}
+-.planner-progress p{color:var(--ink);overflow-wrap:anywhere}
++.planner-progress,.planner-next,.planner-requirements{display:grid;grid-template-columns:58px minmax(0,1fr);gap:8px;font-size:13px;line-height:1.55;margin-top:6px}
++.planner-requirements{grid-template-columns:84px minmax(0,1fr);padding:8px;border-radius:5px;background:#f7f8fa;border-left:2px solid var(--line2)}
++.planner-progress span,.planner-next span,.planner-requirements span{font-size:11px;color:var(--dim);padding-top:2px}
++.planner-progress p,.planner-requirements p{color:var(--ink);overflow-wrap:anywhere}
++.planner-requirements p{white-space:pre-wrap;margin:0}
+ .planner-next{padding:8px;border-radius:5px;background:rgba(37,182,162,.07);border-left:2px solid var(--trk-edit)}
+ .planner-next p{color:var(--ink);overflow-wrap:anywhere}
+ .planner-original{margin-top:5px;font-family:var(--mono);font-size:12px;color:#2f5ec4}
+@@ -332,7 +334,7 @@
+       <div class="slate-bar" aria-hidden="true"></div>
+       <div class="ledger-header-body">
+         <div class="ledger-brand"><span class="production-viewfinder" aria-hidden="true">LG</span><div><p><i class="rec" aria-hidden="true"></i>LANGUI / 摄影 · 剪辑 · 人文叙事</p><h1>LanGui 专业工作库</h1><time id="brandDate"></time></div></div>
+-        <div class="ledger-total"><strong id="total"></strong><span>工作记录</span></div>
++        <div class="ledger-total"><strong id="total"></strong><span id="totalLabel">工作记录</span></div>
+       </div>
+     </div>
+     <div class="ledger-viewer" aria-hidden="true" style="background-image:url('/*__PORTRAIT__*/')"><div class="hud top"><span><i class="rec"></i>REC</span><span id="hudTc"></span></div><div class="hud bot"><span>LANGUI · CAM A</span><span>16:9</span></div></div>
+--- a/restore/src/build.py
++++ b/restore/src/build.py
+@@ -1,14 +1,18 @@
+-# 生成 /workspace/langui/restore/LanGui专业工作库.html（单文件、离线、系统字体）
+-import base64, io, json
+-from PIL import Image
+-R='/workspace/langui/restore/'; S='/workspace/langui/src/'
+-DATA='/workspace/langui/build/data.json'   # Ke 线上导出整理的数据，只读引用，不改
++# 生成单文件网页。默认路径与本机 /workspace/langui 布局一致；测试可设 LANGUI_ROOT / LANGUI_DATA / LANGUI_PORTRAIT / LANGUI_HTML。
++import base64, io, json, os
++ROOT = os.environ.get('LANGUI_ROOT', '/workspace/langui').rstrip('/')
++R = ROOT + '/restore/'
++S = ROOT + '/src/'
++DATA = os.environ.get('LANGUI_DATA', ROOT + '/build/data.json')
++PORTRAIT = os.environ.get('LANGUI_PORTRAIT', S + 'langui-portrait.jpg')
++OUT = os.environ.get('LANGUI_HTML', R + 'LanGui专业工作库.html')
+ def b64(p, maxw, q):
++    from PIL import Image
+     im=Image.open(p).convert('RGB'); im.thumbnail((maxw,maxw)); bio=io.BytesIO(); im.save(bio,'JPEG',quality=q,optimize=True)
+     return 'data:image/jpeg;base64,'+base64.b64encode(bio.getvalue()).decode()
+ html=open(R+'src/app.html',encoding='utf-8').read()
+ html=html.replace('/*__APP__*/',open(R+'src/app.js',encoding='utf-8').read())
+ html=html.replace('/*__DATA__*/null',json.dumps(json.load(open(DATA,encoding='utf-8')),ensure_ascii=False).replace('</','<\\/'))
+-html=html.replace('/*__PORTRAIT__*/',b64(S+'langui-portrait.jpg',900,82))
+-open(R+'LanGui专业工作库.html','w',encoding='utf-8').write(html)
++html=html.replace('/*__PORTRAIT__*/', os.environ.get('LANGUI_PORTRAIT_URI') or b64(PORTRAIT,900,82))
++open(OUT,'w',encoding='utf-8').write(html)
+ print(len(html)//1024,'KB')
+--- /dev/null
++++ b/restore/src/requirements.test.js
+@@ -0,0 +1,171 @@
++// 合成数据：具体制作要求、进度互不覆盖、旧记录、周末与年份。不读取真实工作库。
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const {spawnSync} = require('child_process');
++const assert = require('assert');
++
++const puppeteerPath = process.env.PUPPETEER_CORE
++  || (() => { try { return require.resolve('puppeteer-core'); } catch (e) { return '/workspace/langui/test/node_modules/puppeteer-core'; } })();
++const puppeteer = require(puppeteerPath);
++const chrome = ['/usr/bin/google-chrome', '/usr/local/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
++assert(chrome, '找不到 Chrome');
++
++const REQ = '第一行\n第二行 <b>不是标签</b> 中文「要求」&</script>';
++const srcDir = __dirname;
++const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-req-'));
++fs.mkdirSync(path.join(root, 'restore', 'src'), {recursive: true});
++fs.mkdirSync(path.join(root, 'build'), {recursive: true});
++for (const name of ['app.js', 'app.html', 'build.py']) fs.copyFileSync(path.join(srcDir, name), path.join(root, 'restore', 'src', name));
++const data = {
++  version: 'synthetic',
++  tasks: [
++    {id: 20260001, title: '合成进度任务', month: '2026-11', hidden: false, dateText: '11月16日', done: false, note: '仅进度说明', plan: '2026-11-16', week: '2026-11-16', originalPlan: null, deadline: null, next: '下一步保持', monthNotes: [], stages: null, shoot: null, initial: null, events: [{seq: 1, day: '2026-11-13', text: '周五进展', done: false}], history: [], urgent: false, src: 'synthetic', recordDay: '2026-11-16', sortDay: '2026-11-16', handover: null, requirements: REQ},
++    {id: 20260002, title: '合成无要求', month: '2026-11', hidden: false, dateText: '11月10日', done: false, note: '旧进度不应变成要求', plan: '2026-11-10', week: '2026-11-09', originalPlan: null, deadline: null, next: null, monthNotes: [], stages: null, shoot: null, initial: null, events: [], history: [], urgent: false, src: 'synthetic', recordDay: '2026-11-10', sortDay: '2026-11-10', handover: null},
++    {id: 20250001, title: '合成去年', month: '2025-12', hidden: false, dateText: '12月1日', done: true, note: '去年进度', plan: '2025-12-01', week: '2025-12-01', originalPlan: null, deadline: null, next: null, monthNotes: [], stages: null, shoot: null, initial: null, events: [], history: [], urgent: false, src: 'synthetic', recordDay: '2025-12-01', sortDay: '2025-12-01', handover: null, requirements: ''},
++    {id: 20270001, title: '合成明年', month: '2027-01', hidden: false, dateText: '1月4日', done: false, note: '明年进度', plan: '2027-01-04', week: '2027-01-04', originalPlan: null, deadline: null, next: null, monthNotes: [], stages: null, shoot: null, initial: null, events: [], history: [], urgent: false, src: 'synthetic', recordDay: '2027-01-04', sortDay: '2027-01-04', handover: null}
++  ],
++  social: [],
++  platforms: []
++};
++const dataPath = path.join(root, 'build', 'data.json');
++fs.writeFileSync(dataPath, JSON.stringify(data));
++const out = path.join(root, 'restore', 'out.html');
++const built = spawnSync('python3', [path.join(srcDir, 'build.py')], {
++  env: Object.assign({}, process.env, {
++    LANGUI_ROOT: root,
++    LANGUI_DATA: dataPath,
++    LANGUI_HTML: out,
++    LANGUI_PORTRAIT_URI: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
++  })
++});
++if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.toString()); process.exit(1); }
++const html = fs.readFileSync(out, 'utf8');
++assert(html.includes('weekendShanghai') && html.includes('archiveMonth') && html.includes('id="totalLabel"'));
++assert.equal((html.match(/<script>/g) || []).length, 2, '要求里的 script 结束标记不得截断页面脚本');
++assert(!html.includes('仅进度说明</b>'));
++console.log('✓ 构建保留周末/年份脚本，并把要求中的 </ 转义进数据');
++
++const FILE = 'file://' + out;
++(async () => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-req-chrome-'));
++  const browser = await puppeteer.launch({executablePath: chrome, headless: 'new', userDataDir: dir, args: ['--no-sandbox', '--disable-dev-shm-usage']});
++  const page = await browser.newPage();
++  const errors = [];
++  page.on('pageerror', (err) => errors.push(String(err)));
++  page.on('dialog', (d) => d.accept());
++  const open = async (q) => {
++    await page.goto(FILE + q, {waitUntil: 'load'});
++    await page.waitForFunction('window.__LG_READY');
++  };
++  const card = (title) => page.evaluate((t) => {
++    const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
++    if (!el) return null;
++    const req = el.querySelector('.planner-requirements');
++    const prog = el.querySelector('.planner-progress p');
++    const next = el.querySelector('.planner-next p');
++    return {
++      req: req ? req.querySelector('p').textContent : '',
++      reqHtml: req ? req.querySelector('p').innerHTML : '',
++      hasTag: !!el.querySelector('.planner-requirements b'),
++      progress: prog ? prog.textContent : '',
++      next: next ? next.textContent : ''
++    };
++  }, title);
++  await open('?today=2026-11-16&view=home');
++  const shown = await card('合成进度任务');
++  assert(shown, '排期卡片缺失');
++  assert.equal(shown.req, REQ);
++  assert.equal(shown.hasTag, false);
++  assert(!shown.reqHtml.includes('<b>'));
++  assert.equal(shown.progress, '仅进度说明');
++  assert.equal(shown.next, '下一步保持');
++  const plain = await card('合成无要求');
++  assert(plain && plain.req === '' && plain.progress === '旧进度不应变成要求');
++  const yEmpty = await page.$eval('.planner-yesterday .planner-empty', (el) => el.textContent);
++  const yMeta = await page.$eval('.planner-yesterday small', (el) => el.textContent);
++  assert.equal(yEmpty, '休息');
++  assert(yMeta.includes('11/15'));
++  assert.equal(await page.$eval('#total', (el) => el.textContent), '2');
++  assert.equal(await page.$eval('#totalLabel', (el) => el.textContent), '2026年工作记录');
++  assert.equal(await page.$eval('#brandDate', (el) => el.getAttribute('datetime')), '2026-11-16');
++  console.log('✓ 要求多行/转义/中文独立展示，进度和下一步不变；周日无记录显示休息');
++
++  await open('?today=2026-11-14&view=home');
++  const fri = await page.evaluate(() => ({
++    empty: document.querySelector('.planner-yesterday .planner-empty')?.textContent || '',
++    items: document.querySelectorAll('.planner-yesterday .yesterday-list li').length,
++    meta: document.querySelector('.planner-yesterday small')?.textContent || ''
++  }));
++  assert.equal(fri.empty, '');
++  assert(fri.items > 0 && fri.meta.includes('11/13'));
++  console.log('✓ 周五有进展时不显示休息');
++
++  await open('?today=2026-11-18&view=home');
++  assert.equal(await page.$eval('.planner-yesterday .planner-empty', (el) => el.textContent), '昨天暂无工作记录');
++  assert.equal(await page.$eval('.planner-today .planner-empty', (el) => el.textContent), '今天暂无工作安排');
++  console.log('✓ 工作日空状态保持原样');
++
++  await open('?today=2026-11-16&view=home');
++  await page.click('#years a[data-month="2025-12"]');
++  await page.waitForFunction(() => location.search.includes('month=2025-12'));
++  assert.equal(await page.$eval('#total', (el) => el.textContent), '1');
++  assert.equal(await page.$eval('.ledger-period strong', (el) => el.textContent), '2025年12月');
++  assert.equal(await page.$eval('.planner-today .planner-empty', (el) => el.textContent.startsWith('今天是2026年11月16日')), true);
++  assert.equal(await page.$$eval('.planner-today .daily-list li', (els) => els.length), 0);
++  await page.click('a[data-month="2025-01"]');
++  await page.waitForFunction(() => location.search.includes('month=2025-01'));
++  assert.equal(await page.$eval('.ledger-empty', (el) => el.textContent), '这个月没有工作记录。');
++  await page.click('#years a[data-month="2027-01"]');
++  await page.waitForFunction(() => location.search.includes('month=2027-01'));
++  assert.equal(await page.$eval('#total', (el) => el.textContent), '1');
++  assert.equal(await page.$eval('.ledger-period strong', (el) => el.textContent), '2027年1月');
++  assert.equal(await page.$$eval('.planner-requirements', (els) => els.length), 0);
++  const times = await page.$$eval('.planner-range time', (els) => els.map((el) => el.getAttribute('datetime')));
++  assert(times.every((t) => t.startsWith('2027-01')));
++  await page.click('#years a[data-month="2026-11"]');
++  await page.waitForFunction(() => location.search.includes('month=2026-11'));
++  assert.equal(await page.$eval('#total', (el) => el.textContent), '2');
++  assert.equal((await card('合成进度任务')).req.startsWith('第一行'), true);
++  console.log('✓ 年份切换、空月、明年不冒充要求，切回 2026 后要求仍在');
++
++  await page.evaluate(() => {
++    localStorage.setItem('langui-work-v3', JSON.stringify({v: 3, work: {'20260001': {id: 20260001, title: '合成进度任务', month: '2026-11', date: '11月16日', progress: '本地改过的进度', done: false, planned: '2026-11-16', week: '2026-11-16', nextStep: '下一步保持'}}, addedEvents: [], social: {}, priorities: {}, deadlines: {}, videoStages: {}}));
++  });
++  await page.reload({waitUntil: 'load'});
++  await page.waitForFunction('window.__LG_READY');
++  const kept = await card('合成进度任务');
++  assert.equal(kept.progress, '本地改过的进度');
++  assert(kept.req.startsWith('第一行'));
++  console.log('✓ 旧的本地覆盖层没有要求字段时，仍保留数据里的要求');
++
++  await page.evaluate(() => localStorage.clear());
++  await open('?today=2026-11-16&edit=1&view=home');
++  await page.evaluate(() => document.querySelector('[data-edit="20260001"]').click());
++  await page.waitForSelector('#workForm textarea[name=requirements]');
++  const hint = await page.$eval('#workForm', (el) => el.innerText);
++  assert(hint.includes('只保存在这台浏览器'));
++  await page.$eval('#workForm input[name=progress]', (el) => { el.value = '本地新进度'; });
++  await page.click('#workForm .work-button');
++  await page.waitForFunction(() => !document.querySelector('dialog[open]'));
++  let after = await card('合成进度任务');
++  assert.equal(after.progress, '本地新进度');
++  assert(after.req.startsWith('第一行'));
++  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('langui-work-v3')).work['20260001']);
++  assert(saved.requirements.startsWith('第一行'));
++  assert.equal(saved.progress, '本地新进度');
++  await page.evaluate(() => document.querySelector('[data-edit="20260001"]').click());
++  await page.$eval('#workForm textarea[name=requirements]', (el) => { el.value = ''; });
++  await page.click('#workForm .work-button');
++  await page.waitForFunction(() => !document.querySelector('dialog[open]'));
++  after = await card('合成进度任务');
++  assert.equal(after.req, '');
++  assert.equal(after.progress, '本地新进度');
++  console.log('✓ 维护模式只写入 localStorage：改进度不丢要求，清空要求不改进度');
++
++  assert.equal(errors.length, 0, errors.join('\n'));
++  await browser.close();
++  fs.rmSync(dir, {recursive: true, force: true});
++  fs.rmSync(root, {recursive: true, force: true});
++  console.log('PAGE_PASS');
++})().catch((err) => { console.error('FAIL', err); process.exit(1); });
