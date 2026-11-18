@@ -355,7 +355,7 @@ function weekly(view, home){
       parts.push('<p class="day-line"><span>最新进展</span>' + esc(ev[0].progress || '') + '</p>');
       parts.push(history(ev.slice(1)));
     }
-    if (follow) parts.push('<p class="day-line"><span>初稿完成</span>' + esc(doneDay) + '</p>');
+    if (follow) parts.push('<p class="day-line"><span>此前已完成</span>' + esc(doneDay) + '</p>');
     var badge = '';
     if (mode === 'today') badge = completedToday ? '<span class="daily-kind">已完成</span>' : (plannedToday && !r.done ? '<span class="daily-kind">今日安排</span>' : (follow ? '<span class="daily-kind">本轮安排</span>' : '<span class="daily-kind">当天进展</span>'));
     else if (completedToday) badge = '<span class="daily-kind">已完成</span>';
@@ -404,7 +404,7 @@ function weekly(view, home){
       (displayDate ? '<time datetime="' + displayDate + '">' + dateLabel(displayDate) + '</time><small>' + WD[new Date(displayDate + 'T00:00:00Z').getUTCDay()] + '</small>' : '日期未定') + '</span><div>' +
       workTag(r) + (isUpdate ? '<span class="planner-carry-label">本周进展</span>' : '') + (r.urgent && !r.done ? '<span class="planner-urgent">紧急</span>' : '') +
       (!isUpdate && r.planned && r.planned < week && !r.done && week === currentWeek ? '<span class="planner-carry-label">待继续</span>' : '') +
-      (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (laterRound(r) ? '<span class="planner-carry-label">初稿已完成</span>' : (r.done ? '<span class="planner-done">已完成</span>' : '')) + '</div></div>' +
+      (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (laterRound(r) ? '<span class="planner-carry-label">此前已完成</span>' : (r.done ? '<span class="planner-done">已完成</span>' : '')) + '</div></div>' +
       '<h4>' + esc(r.title) + '</h4>' + (r.videoStage ? videoStageLine(r.videoStage) : '') +
       (r.project ? archiveLink('?project=' + encodeURIComponent(r.project) + '#archive', esc(r.project)) : '') +
       (last && last.waiting ? '<p>等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p>下次跟进：' + esc(last.followUp) + '</p>' : '') +
@@ -431,7 +431,7 @@ function weekly(view, home){
       var items = weekItems.filter(function(r){ return laterRound(r) ? !g.done : r.done === g.done; });
       return '<section class="week-status-group ' + (g.done ? 'is-done' : 'is-open') + '" aria-label="' + g.label + '"><h4><span>' + (g.done ? '✓' : '●') + '</span>' + g.label + '<small>' + items.length + ' 项</small></h4>' +
         (items.length ? '<ul class="planner-week-list">' + items.map(function(r){ var d = viewDate(r) || completionDay(r); var doneDay = completionDay(r);
-          return '<li' + (laterRound(r) ? ' title="初稿已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done && doneDay && inWeek(doneDay) && !laterRound(r) ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
+          return '<li' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done && doneDay && inWeek(doneDay) && !laterRound(r) ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
     }).join('') + '</div></section>';
     out += '<section class="planner-group planner-week-schedule"><h3>本周排期 <small>' + dated.length + ' 项</small></h3>' + (dated.length ? '<ul class="planner-grid">' + dated.map(show).join('') + '</ul>' : '<p class="planner-empty">暂无排期</p>') + '</section>';
     var liveYear = archiveMonth().slice(0,4) === today.slice(0,4);

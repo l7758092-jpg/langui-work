@@ -1,4 +1,4 @@
-// 合成数据：今天/昨天显示、初稿完成与新安排、周末和年份。不读取真实工作库。
+// 合成数据：今天/昨天显示、此前已完成与新安排、周末和年份。不读取真实工作库。
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -20,7 +20,7 @@ const data = {
     task({id: 1, title: '合成再修改', month: '2026-11', dateText: '11月27日成片', done: true, completed: '2026-11-13', note: '当前竖版安排', plan: '2026-11-18', next: '今天做竖版', requirements: '要求保留', recordDay: '2026-11-13', sortDay: '2026-11-18', events: [
       {seq: 10, day: '2026-11-18', text: '旧的改期说明', done: false},
       {seq: 11, day: '2026-11-18', text: '更旧的安排', done: false},
-      {seq: 9, day: '2026-11-13', text: '初稿完成记录', done: true}
+      {seq: 9, day: '2026-11-13', text: '较早的完成记录', done: true}
     ]}),
     task({id: 2, title: '合成当日进展', month: '2026-11', dateText: '11月10日', done: true, completed: '2026-11-10', note: '不要当成今天的安排', plan: '2026-11-10', recordDay: '2026-11-10', sortDay: '2026-11-10', events: [
       {seq: 20, day: '2026-11-18', text: '今天才发生的进展', done: false}
@@ -71,7 +71,8 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   assert.equal(again.badge, '本轮安排');
   assert(again.lines.some((l) => l.startsWith('当前进度') && l.includes('当前竖版安排')));
   assert(again.lines.some((l) => l.startsWith('下一步') && l.includes('今天做竖版')));
-  assert(again.lines.some((l) => l.startsWith('初稿完成') && l.includes('2026-11-13')));
+  assert(again.lines.some((l) => l.startsWith('此前已完成') && l.includes('2026-11-13')));
+  assert(!again.lines.some((l) => l.includes('初稿')));
   assert(!again.lines.some((l) => l.includes('旧的改期说明')));
   assert(again.history.includes('旧的改期说明') && again.history.includes('更旧的安排') && again.open === false);
   const progressOnly = await item('.daily-list', '合成当日进展');
@@ -90,6 +91,9 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
     return {inOpen: !!li, check: li ? !!li.querySelector('.week-done-check') : false, doneGroupHas: [...document.querySelectorAll('.week-status-group.is-done li')].some((el) => el.textContent.includes('合成再修改'))};
   });
   assert(weekRow.inOpen && !weekRow.check && !weekRow.doneGroupHas);
+  const roundLabel = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.textContent || '');
+  assert(roundLabel.includes('此前已完成') && roundLabel.includes('本轮安排') === false);
+  assert(!roundLabel.includes('初稿'));
   const ticks = await page.evaluate(() => [...document.querySelectorAll('.ledger-scroll tbody tr')].filter((tr) => tr.children[1].textContent.includes('合成再修改')).map((tr) => ({date: tr.children[0].textContent.trim(), tick: !!tr.querySelector('.ledger-tick')})));
   assert(ticks.some((row) => row.date === '2026-11-13' && row.tick));
   assert(ticks.some((row) => row.date === '2026-11-18' && !row.tick));
