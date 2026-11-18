@@ -149,6 +149,10 @@ ul,ol{margin:0;padding:0;list-style:none}
 .daily-list li,.yesterday-list li{position:relative;padding:8px 0 8px 18px;border-bottom:1px dashed var(--line);font-size:14px}
 .daily-list li:before,.yesterday-list li:before{content:"";position:absolute;left:2px;top:15px;width:7px;height:7px;border-radius:50%;border:2px solid var(--accent)}
 .daily-list p,.yesterday-list p{margin-top:3px;color:var(--muted);font-size:13px}
+.day-line{display:grid;grid-template-columns:64px minmax(0,1fr);gap:6px;margin-top:4px;color:var(--ink);font-size:13px}
+.day-line span{color:var(--dim);font-size:11px}
+.day-history{margin-top:4px;color:var(--muted);font-size:12px}
+.day-history summary{cursor:pointer}
 .daily-kind{display:inline-block;margin-left:7px;font-size:11px;line-height:18px;padding:0 7px;border-radius:4px;background:rgba(14,128,112,.12);color:#0d7a6c}
 .planner-empty{padding:10px 12px;border:1px dashed var(--line2);border-radius:6px;color:var(--dim);font-size:13px}
 /* 本周做了什么 / 整体汇报 */

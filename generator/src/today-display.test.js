@@ -1,0 +1,125 @@
+// 合成数据：今天/昨天显示、初稿完成与新安排、周末和年份。不读取真实工作库。
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const {spawnSync} = require('child_process');
+const assert = require('assert');
+const puppeteer = require(process.env.PUPPETEER_CORE || (() => { try { return require.resolve('puppeteer-core'); } catch (e) { return '/workspace/langui/test/node_modules/puppeteer-core'; } })());
+const chrome = ['/usr/bin/google-chrome', '/usr/local/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
+assert(chrome, '找不到 Chrome');
+
+const srcDir = __dirname;
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-today-'));
+fs.mkdirSync(path.join(root, 'restore', 'src'), {recursive: true});
+fs.mkdirSync(path.join(root, 'build'), {recursive: true});
+for (const name of ['app.js', 'app.html', 'build.py']) fs.copyFileSync(path.join(srcDir, name), path.join(root, 'restore', 'src', name));
+const task = (extra) => Object.assign({hidden: false, week: '2026-11-16', originalPlan: null, deadline: null, next: null, monthNotes: [], stages: null, shoot: null, initial: null, history: [], urgent: false, src: 'synthetic', handover: null, requirements: null}, extra);
+const data = {
+  version: 'synthetic',
+  tasks: [
+    task({id: 1, title: '合成再修改', month: '2026-11', dateText: '11月27日成片', done: true, completed: '2026-11-13', note: '当前竖版安排', plan: '2026-11-18', next: '今天做竖版', requirements: '要求保留', recordDay: '2026-11-13', sortDay: '2026-11-18', events: [
+      {seq: 10, day: '2026-11-18', text: '旧的改期说明', done: false},
+      {seq: 11, day: '2026-11-18', text: '更旧的安排', done: false},
+      {seq: 9, day: '2026-11-13', text: '初稿完成记录', done: true}
+    ]}),
+    task({id: 2, title: '合成当日进展', month: '2026-11', dateText: '11月10日', done: true, completed: '2026-11-10', note: '不要当成今天的安排', plan: '2026-11-10', recordDay: '2026-11-10', sortDay: '2026-11-10', events: [
+      {seq: 20, day: '2026-11-18', text: '今天才发生的进展', done: false}
+    ]}),
+    task({id: 3, title: '合成当天完成', month: '2026-11', dateText: '11月18日', done: true, completed: '2026-11-18', note: '完成说明', plan: '2026-11-18', recordDay: '2026-11-18', sortDay: '2026-11-18', events: [
+      {seq: 30, day: '2026-11-18', text: '完成说明', done: true}
+    ]}),
+    task({id: 4, title: '合成未完成', month: '2026-11', dateText: '11月18日', done: false, note: '未完成进度', plan: '2026-11-18', next: '继续做', recordDay: '2026-11-18', sortDay: '2026-11-18', events: []}),
+    task({id: 5, title: '合成后天', month: '2026-11', dateText: '11月19日', done: false, note: '后天的说明', plan: '2026-11-19', requirements: '后天要求', recordDay: '2026-11-18', sortDay: '2026-11-19', events: [
+      {seq: 40, day: '2026-11-18', text: '建档记录', done: false}
+    ]}),
+    task({id: 6, title: '合成昨天', month: '2026-11', dateText: '11月17日', done: false, note: '今天的说明不能算昨天', plan: '2026-11-16', recordDay: '2026-11-17', sortDay: '2026-11-17', events: [
+      {seq: 1, day: '2026-11-17', text: '昨天旧记录', done: false},
+      {seq: 2, day: '2026-11-17', text: '昨天最新记录', done: false}
+    ]}),
+    task({id: 7, title: '合成去年', month: '2025-12', dateText: '12月1日', done: true, completed: '2025-12-01', note: '去年进度', plan: '2025-12-01', week: '2025-12-01', recordDay: '2025-12-01', sortDay: '2025-12-01', events: []})
+  ],
+  social: [],
+  platforms: []
+};
+const dataPath = path.join(root, 'build', 'data.json');
+fs.writeFileSync(dataPath, JSON.stringify(data));
+const out = path.join(root, 'restore', 'out.html');
+const built = spawnSync('python3', [path.join(srcDir, 'build.py')], {env: Object.assign({}, process.env, {
+  LANGUI_ROOT: root, LANGUI_DATA: dataPath, LANGUI_HTML: out,
+  LANGUI_PORTRAIT_URI: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+})});
+if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.toString()); process.exit(1); }
+
+(async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-today-chrome-'));
+  const browser = await puppeteer.launch({executablePath: chrome, headless: 'new', userDataDir: dir, args: ['--no-sandbox', '--disable-dev-shm-usage']});
+  const page = await browser.newPage();
+  await page.setViewport({width: 1280, height: 900});
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  const open = async (q) => { await page.goto('file://' + out + q, {waitUntil: 'load'}); await page.waitForFunction('window.__LG_READY'); };
+  const item = (sel, title) => page.evaluate((s, t) => {
+    const el = [...document.querySelectorAll(s + ' li')].find((li) => li.querySelector('strong') && li.querySelector('strong').textContent === t);
+    if (!el) return null;
+    const lines = [...el.querySelectorAll('.day-line')].map((p) => p.textContent.trim());
+    const history = el.querySelector('.day-history');
+    return {badge: el.querySelector('.daily-kind')?.textContent || '', lines, history: history ? history.textContent : '', open: history ? history.open : false};
+  }, sel, title);
+  await open('?today=2026-11-18&view=home');
+  const again = await item('.daily-list', '合成再修改');
+  assert(again, '再修改任务应出现在今天');
+  assert.equal(again.badge, '本轮安排');
+  assert(again.lines.some((l) => l.startsWith('当前进度') && l.includes('当前竖版安排')));
+  assert(again.lines.some((l) => l.startsWith('下一步') && l.includes('今天做竖版')));
+  assert(again.lines.some((l) => l.startsWith('初稿完成') && l.includes('2026-11-13')));
+  assert(!again.lines.some((l) => l.includes('旧的改期说明')));
+  assert(again.history.includes('旧的改期说明') && again.history.includes('更旧的安排') && again.open === false);
+  const progressOnly = await item('.daily-list', '合成当日进展');
+  assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.lines.some((l) => l.includes('今天才发生的进展')));
+  assert(!progressOnly.lines.some((l) => l.includes('不要当成今天的安排')));
+  const finished = await item('.daily-list', '合成当天完成');
+  assert(finished && finished.badge === '已完成');
+  const openTask = await item('.daily-list', '合成未完成');
+  assert(openTask && openTask.badge === '今日安排' && openTask.lines.some((l) => l.includes('未完成进度')));
+  assert.equal(await item('.daily-list', '合成后天'), null);
+  const titles = await page.$$eval('.planner-card h4', (els) => els.map((el) => el.textContent));
+  assert(titles.includes('合成后天') && titles.includes('合成再修改'));
+  const weekRow = await page.evaluate(() => {
+    const open = document.querySelector('.week-status-group.is-open');
+    const li = [...open.querySelectorAll('li')].find((el) => el.textContent.includes('合成再修改'));
+    return {inOpen: !!li, check: li ? !!li.querySelector('.week-done-check') : false, doneGroupHas: [...document.querySelectorAll('.week-status-group.is-done li')].some((el) => el.textContent.includes('合成再修改'))};
+  });
+  assert(weekRow.inOpen && !weekRow.check && !weekRow.doneGroupHas);
+  const ticks = await page.evaluate(() => [...document.querySelectorAll('.ledger-scroll tbody tr')].filter((tr) => tr.children[1].textContent.includes('合成再修改')).map((tr) => ({date: tr.children[0].textContent.trim(), tick: !!tr.querySelector('.ledger-tick')})));
+  assert(ticks.some((row) => row.date === '2026-11-13' && row.tick));
+  assert(ticks.some((row) => row.date === '2026-11-18' && !row.tick));
+  const doneTicks = await page.evaluate(() => [...document.querySelectorAll('.ledger-scroll tbody tr')].filter((tr) => tr.children[1].textContent.includes('合成当天完成')).map((tr) => ({date: tr.children[0].textContent.trim(), tick: !!tr.querySelector('.ledger-tick')})));
+  assert(doneTicks.some((row) => row.date === '2026-11-18' && row.tick));
+  const y = await item('.yesterday-list', '合成昨天');
+  assert(y && y.lines[0].includes('昨天最新记录') && y.history.includes('昨天旧记录'));
+  assert(!y.lines.some((l) => l.includes('今天的说明不能算昨天')));
+  assert((await page.$eval('.planner-yesterday li strong', (el) => el.textContent)) === '合成昨天');
+  const req = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.querySelector('.planner-requirements p')?.textContent || '');
+  assert.equal(req, '要求保留');
+  console.log('✓ 新安排、当天进展、完成归属、未来计划、昨天记录和要求字段');
+
+  await open('?today=2026-11-15&view=home');
+  assert.equal(await page.$eval('.planner-yesterday .planner-empty', (el) => el.textContent), '休息');
+  console.log('✓ 周末无记录仍显示休息');
+
+  await open('?today=2026-11-18&view=home');
+  await page.click('#years a[data-month="2025-12"]');
+  await page.waitForFunction(() => location.search.includes('month=2025-12'));
+  assert.equal(await page.$eval('#total', (el) => el.textContent), '1');
+  assert.equal(await page.$eval('.ledger-period strong', (el) => el.textContent), '2025年12月');
+  await page.click('#years a[data-month="2026-11"]');
+  await page.waitForFunction(() => location.search.includes('month=2026-11'));
+  assert.equal(await item('.daily-list', '合成再修改') != null, true);
+  console.log('✓ 年份筛选后切回，今天的新安排仍在');
+
+  assert.equal(errors.length, 0, errors.join('\n'));
+  await browser.close();
+  fs.rmSync(dir, {recursive: true, force: true});
+  fs.rmSync(root, {recursive: true, force: true});
+  console.log('TODAY_PASS');
+})().catch((err) => { console.error('FAIL', err); process.exit(1); });
