@@ -19,6 +19,18 @@ function todayShanghai(){
 function shift(day, n){ var d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
 function monday(day){ return shift(day, -((new Date(day + 'T00:00:00Z').getUTCDay() + 6) % 7)); }
 function validDate(s){ if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false; var d = new Date(s + 'T00:00:00Z'); return isFinite(+d) && d.toISOString().slice(0,10) === s; }
+function completionDay(r){
+  if (!r) return null;
+  if (r.completed) return r.completed;
+  var date = r.date || '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  var m = String(date).match(/^(\d{1,2})月(\d{1,2})日(?:下午|上午|\s.*)?$/);
+  return m && r.month ? r.month.slice(0,4) + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0') : null;
+}
+function laterRound(r){
+  var day = completionDay(r);
+  return !!(r && r.done && day && r.planned && r.planned > day);
+}
 function weekendShanghai(day){
   if (!validDate(day)) return false;
   var name = new Intl.DateTimeFormat('en-US', {timeZone:'Asia/Shanghai', weekday:'short'}).format(new Date(day + 'T12:00:00+08:00'));
@@ -329,41 +341,50 @@ function weekly(view, home){
   var updated = rows.filter(function(r){ return !r.done && dated.indexOf(r) < 0 && Boolean(progressDate(r)); });
   var pending = rows.filter(function(r){ return !r.done && !r.planned && r.week === week; });
   var review = rows.filter(function(r){ return pending.indexOf(r) < 0 && (r.review || r.progress === '已导出待验收'); });
-  var actualDay = function(r){
-    if (r.completed) return r.completed;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(r.date)) return r.date;
-    var m = r.date.match(/^(\d{1,2})月(\d{1,2})日(?:下午|上午|\s.*)?$/);
-    return m ? r.month.slice(0,4) + '-' + m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0') : null;
-  };
   var yesterday = shift(today, -1);
+  var eventsOn = function(r, day){ return (r.history || []).filter(function(e){ return e.day === day; }).sort(function(a, b){ return b.id - a.id; }); };
+  var dayEntry = function(r, day, mode){
+    var ev = eventsOn(r, day), doneDay = completionDay(r), plannedToday = r.planned === day, completedToday = !!(r.done && doneDay === day);
+    var follow = !!(r.done && plannedToday && doneDay && doneDay < day);
+    var parts = [], history = function(list){ return list.length ? '<details class="day-history"><summary>历史进展 ' + list.length + ' 条</summary>' + list.map(function(e){ return '<p>' + esc(e.progress || '') + '</p>'; }).join('') + '</details>' : ''; };
+    if (mode === 'today' && plannedToday && (r.progress || r.nextStep)){
+      if (r.progress) parts.push('<p class="day-line"><span>当前进度</span>' + esc(r.progress) + '</p>');
+      if (r.nextStep) parts.push('<p class="day-line"><span>下一步</span>' + esc(r.nextStep) + '</p>');
+      parts.push(history(ev));
+    } else if (ev.length){
+      parts.push('<p class="day-line"><span>最新进展</span>' + esc(ev[0].progress || '') + '</p>');
+      parts.push(history(ev.slice(1)));
+    }
+    if (follow) parts.push('<p class="day-line"><span>此前已完成</span>' + esc(doneDay) + '</p>');
+    var badge = '';
+    if (mode === 'today') badge = completedToday ? '<span class="daily-kind">已完成</span>' : (plannedToday && !r.done ? '<span class="daily-kind">今日安排</span>' : (follow ? '<span class="daily-kind">本轮安排</span>' : '<span class="daily-kind">当天进展</span>'));
+    else if (completedToday) badge = '<span class="daily-kind">已完成</span>';
+    return { id: r.id, title: r.title, plannedToday: plannedToday, latest: ev.length ? ev[0].id : 0, html: badge + parts.join('') };
+  };
   var yesterdayItems = [];
   rows.forEach(function(r){
-    var ev = r.history.filter(function(e){ return e.day === yesterday; });
-    if (ev.length) yesterdayItems.push({ id: r.id, title: r.title, details: ev.map(function(e){ return e.progress; }).filter(Boolean) });
-    else if (r.done && actualDay(r) === yesterday) yesterdayItems.push({ id: r.id, title: r.title, details: [] });
+    if (eventsOn(r, yesterday).length || (r.done && completionDay(r) === yesterday)) yesterdayItems.push(dayEntry(r, yesterday, 'yesterday'));
   });
+  yesterdayItems.sort(function(a, b){ return (b.latest - a.latest) || a.id - b.id; });
   var todayItems = [];
   rows.forEach(function(r){
-    if (r.planned !== today) return;
-    var ev = r.history.filter(function(e){ return e.day === today; });
-    var planned = !r.done, completed = r.done && actualDay(r) === today;
-    if (!planned && !completed) return;
-    todayItems.push({ id: r.id, title: r.title, planned: planned, completed: completed, details: ev.map(function(e){ return e.progress; }).filter(Boolean) });
+    var ev = eventsOn(r, today), future = r.planned && r.planned > today;
+    if (r.planned === today || (ev.length && !future)) todayItems.push(dayEntry(r, today, 'today'));
   });
-  todayItems.sort(function(a, b){ return (Number(b.planned) - Number(a.planned)) || a.id - b.id; });
+  todayItems.sort(function(a, b){ return (Number(b.plannedToday) - Number(a.plannedToday)) || (b.latest - a.latest) || a.id - b.id; });
   var activity = [];
   rows.forEach(function(r){
     var ev = r.history.filter(function(e){ return inWeek(e.day); });
     var last = ev[ev.length - 1];
     if (last){ activity.push({ title: r.title, done: last.done, progress: ev.map(function(e){ return e.day + ' ' + e.progress; }).join(' → ') }); return; }
-    var day = actualDay(r);
+    var day = completionDay(r);
     if (r.done && day && inWeek(day) && (!r.history.length || r.completed)) activity.push({ title: r.title, done: r.done, progress: day + ' ' + r.progress });
   });
   activity.sort(function(a, b){ return a.progress.localeCompare(b.progress); });
   var speech = speechText(activity);
   var viewDate = function(r){ return updated.indexOf(r) >= 0 ? progressDate(r) : r.planned; };
-  var weekItems = rows.filter(function(r){ return dated.indexOf(r) >= 0 || (!r.planned && r.week === week) || (r.done && actualDay(r) && inWeek(actualDay(r))); })
-    .sort(function(a, b){ var d = function(r){ return viewDate(r) || actualDay(r); }; return (d(a) || '9999-99-99').localeCompare(d(b) || '9999-99-99') || a.id - b.id; });
+  var weekItems = rows.filter(function(r){ return dated.indexOf(r) >= 0 || (!r.planned && r.week === week) || (r.done && completionDay(r) && inWeek(completionDay(r))); })
+    .sort(function(a, b){ var d = function(r){ return viewDate(r) || completionDay(r); }; return (d(a) || '9999-99-99').localeCompare(d(b) || '9999-99-99') || a.id - b.id; });
   var dateLabel = function(v){ return v.slice(5).replace('-', ' / '); };
   var weekNumber = Math.floor((Number(week.slice(8,10)) - 1) / 7);
   var weekTitle = Number(week.slice(5,7)) + '月第' + CN[weekNumber] + '周';
@@ -383,7 +404,7 @@ function weekly(view, home){
       (displayDate ? '<time datetime="' + displayDate + '">' + dateLabel(displayDate) + '</time><small>' + WD[new Date(displayDate + 'T00:00:00Z').getUTCDay()] + '</small>' : '日期未定') + '</span><div>' +
       workTag(r) + (isUpdate ? '<span class="planner-carry-label">本周进展</span>' : '') + (r.urgent && !r.done ? '<span class="planner-urgent">紧急</span>' : '') +
       (!isUpdate && r.planned && r.planned < week && !r.done && week === currentWeek ? '<span class="planner-carry-label">待继续</span>' : '') +
-      (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (r.done ? '<span class="planner-done">已完成</span>' : '') + '</div></div>' +
+      (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (laterRound(r) ? '<span class="planner-carry-label">此前已完成</span>' : (r.done ? '<span class="planner-done">已完成</span>' : '')) + '</div></div>' +
       '<h4>' + esc(r.title) + '</h4>' + (r.videoStage ? videoStageLine(r.videoStage) : '') +
       (r.project ? archiveLink('?project=' + encodeURIComponent(r.project) + '#archive', esc(r.project)) : '') +
       (last && last.waiting ? '<p>等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p>下次跟进：' + esc(last.followUp) + '</p>' : '') +
@@ -407,17 +428,17 @@ function weekly(view, home){
     if (EDIT) out += '<div class="edit-bar"><span>维护模式</span><button class="work-button" data-new="1" data-week="' + week + '">＋ 新增工作</button><button class="work-link" data-act="export">导出备份</button><button class="work-link" data-act="import">导入备份</button></div>';
     out += '<div class="planner-board planner-week-overview">';
     out += '<section class="planner-group planner-week-contents"><h3>本周工作内容</h3><div class="week-status-groups">' + [{label:'未完成', done:false}, {label:'已完成', done:true}].map(function(g){
-      var items = weekItems.filter(function(r){ return r.done === g.done; });
+      var items = weekItems.filter(function(r){ return laterRound(r) ? !g.done : r.done === g.done; });
       return '<section class="week-status-group ' + (g.done ? 'is-done' : 'is-open') + '" aria-label="' + g.label + '"><h4><span>' + (g.done ? '✓' : '●') + '</span>' + g.label + '<small>' + items.length + ' 项</small></h4>' +
-        (items.length ? '<ul class="planner-week-list">' + items.map(function(r){ var d = viewDate(r) || actualDay(r);
-          return '<li><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
+        (items.length ? '<ul class="planner-week-list">' + items.map(function(r){ var d = viewDate(r) || completionDay(r); var doneDay = completionDay(r);
+          return '<li' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done && doneDay && inWeek(doneDay) && !laterRound(r) ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
     }).join('') + '</div></section>';
     out += '<section class="planner-group planner-week-schedule"><h3>本周排期 <small>' + dated.length + ' 项</small></h3>' + (dated.length ? '<ul class="planner-grid">' + dated.map(show).join('') + '</ul>' : '<p class="planner-empty">暂无排期</p>') + '</section>';
     var liveYear = archiveMonth().slice(0,4) === today.slice(0,4);
     var todayBody = todayItems.length ? '<ul class="daily-list">' + todayItems.map(function(it){
-      return '<li><strong>' + esc(it.title) + '</strong>' + (it.planned ? '<span class="daily-kind">今日安排</span>' : '') + (it.completed ? '<span class="daily-kind">已完成</span>' : '') + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
+      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
     var yesterdayBody = yesterdayItems.length ? '<ul class="yesterday-list">' + yesterdayItems.map(function(it){
-      return '<li><strong>' + esc(it.title) + '</strong>' + it.details.map(function(d){ return '<p>' + esc(d) + '</p>'; }).join('') + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
+      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
     var todayMeta = today.slice(5).replace('-', '/') + ' · ' + todayItems.length + ' 项';
     var yesterdayMeta = yesterday.slice(5).replace('-', '/') + ' · ' + yesterdayItems.length + ' 项';
     if (!liveYear){
@@ -531,7 +552,7 @@ function monthLedger(){
       return '<tr><td>' + esc(e.date) + '</td><td>' + esc(row.title) + ' ' + (row.project ? archiveLink('?project=' + encodeURIComponent(row.project) + '#archive', esc(row.project)) : '') + ' ' + workTag(row) + ev +
         (EDIT && e.key === latest[row.id] ? ' <button class="work-link" data-edit="' + row.id + '">详情／更新</button>' : '') + '</td><td>' +
         (description(e.progress) ? esc(description(e.progress)) : description(row.progress) ? esc(description(row.progress)) : esc(row.title) + '<small class="ledger-event">原表未记具体说明</small>') +
-        '</td><td class="ledger-completion">' + (row.done ? '<span role="img" aria-label="已完成" class="ledger-tick">✓</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+        '</td><td class="ledger-completion">' + (row.done && completionDay(row) && completionDay({ completed: null, date: e.date, month: row.month }) === completionDay(row) ? '<span role="img" aria-label="已完成" class="ledger-tick">✓</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
   } else o += '<p class="ledger-empty">' + (entries.length ? '没有符合筛选条件的记录' : (yearRows ? '这个月没有工作记录。' : year + '年没有工作记录。')) + '</p>';
   o += '</section></div>';
   return o;
