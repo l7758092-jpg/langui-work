@@ -289,6 +289,42 @@ class WeeklyReportStoreTest(unittest.TestCase):
         self.assertNotIn('marker', cross)
         self.assertEqual(next(row for row in data['weeklyReports'] if row['week'] == '2026-11-16')['marker']['id'], 'synthetic-keep')
 
+    def test_followups_keep_pending_meetings_and_leave_history(self):
+        data = copy.deepcopy(BASE)
+        tasks = copy.deepcopy(data['tasks'])
+        store.m_save_weekly_report(data, '2025-12-29', cross_projects(), [])
+        cross_before = copy.deepcopy(next(row for row in data['weeklyReports'] if row['week'] == '2025-12-29'))
+        pending = '2026-11-25 虚构后续待参加会议句子'
+        follow = this_followups()
+        follow[0]['blocks'].append({'type': '会议', 'lines': [
+            row('📌', '周三上午', pending, attendance='待参加'),
+        ]})
+        store.m_save_weekly_report(data, '2026-11-16', this_projects(), follow)
+        current = next(row for row in data['weeklyReports'] if row['week'] == '2026-11-16')
+        saved = block_line(current['followups'][0], '会议', '周三上午')
+        self.assertEqual(saved['attendance'], '待参加')
+        self.assertEqual(saved['text'], pending)
+        self.assertNotIn(pending, json.dumps(current['projects'], ensure_ascii=False))
+        self.assertEqual(next(row for row in data['weeklyReports'] if row['week'] == '2025-12-29'), cross_before)
+        self.assertEqual(data['tasks'], tasks)
+        attended = copy.deepcopy(follow)
+        attended[0]['blocks'][-1]['lines'][0]['attendance'] = '已参加'
+        attended[0]['blocks'][-1]['lines'][0]['text'] = '2026-11-18 虚构已开完的会'
+        with self.assertRaises(ValueError) as ctx:
+            store.m_save_weekly_report(copy.deepcopy(BASE), '2026-11-16', this_projects(), attended)
+        self.assertIn('待参加', str(ctx.exception))
+        with self.assertRaises(ValueError):
+            store.m_save_weekly_report(copy.deepcopy(BASE), '2026-11-16', this_projects(), [{
+                'name': '虚构不该进后续', 'emoji': '🎬', 'status': '进行中',
+                'blocks': [{'type': '制作', 'lines': [{'emoji': '✅', 'label': '文案', 'text': '虚构制作不进后续'}]}],
+            }])
+        nodate = copy.deepcopy(follow)
+        nodate[0]['blocks'][-1]['lines'][0]['text'] = '下周再看'
+        with self.assertRaises(ValueError):
+            store.m_save_weekly_report(copy.deepcopy(BASE), '2026-11-16', this_projects(), nodate)
+        self.assertEqual(data['tasks'], tasks)
+        self.assertEqual(next(row for row in data['weeklyReports'] if row['week'] == '2025-12-29'), cross_before)
+
     def test_rejects_bad_shape_without_touching_tasks(self):
         data = copy.deepcopy(BASE)
         before = copy.deepcopy(data)

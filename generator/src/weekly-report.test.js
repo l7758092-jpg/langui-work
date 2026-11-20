@@ -83,6 +83,9 @@ const reports = [
         line('⏳', '素材截止', '2026-11-27'),
         line('📌', '后续', FOLLOW),
         line('📦', '交片', '虚构跟进交片句子')
+      ]},
+      {type: '会议', lines: [
+        line('📌', '周三上午', '2026-11-25 虚构后续待参加会议句子', {attendance: '待参加'})
       ]}]
     }]
   },
@@ -190,7 +193,7 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   let kept = await reportOf();
   assert.equal(kept.week, '2025-12-29');
   assert(kept.text.includes(CROSS_COPY));
-  assert(!kept.text.includes('虚构甲周文案句子'));
+  assert(!kept.text.includes('虚构甲周文案句子') && !kept.text.includes('虚构后续待参加会议句子'));
   await open(pageBuild.out, '?today=2026-11-18');
   await page.click('.workspace-switch button[data-view="weekly-work-report"]');
   await page.waitForFunction(() => location.hash === '#weekly-work-report' && location.search.includes('week=2026-11-16'));
@@ -214,7 +217,9 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.deepEqual(view.doneProjects[1].order, ['wreport-name', 'wreport-emoji', 'wreport-project-status']);
   assert(!view.doneProjects[0].name.includes('进行中'));
   const sectionHeads = await page.$$eval('.wreport h4, .wreport h5', (els) => els.map((el) => el.textContent.trim()));
-  assert.deepEqual(sectionHeads, ['已参加', '待参加']);
+  assert.deepEqual(sectionHeads, ['已参加', '待参加', '待参加']);
+  const laterHeads = await page.$$eval('.wreport-later h5', (els) => els.map((el) => el.textContent.trim()));
+  assert.deepEqual(laterHeads, ['待参加']);
   const byLabel = (block, label) => view.done.find((item) => item.block === block && item.label === label);
   const copy = byLabel('制作', '文案');
   const land = byLabel('制作', '横版');
@@ -248,10 +253,20 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.equal(port.aspect, '9:16');
   assert.equal(port.text, THIS_PORT);
   assert(!port.text.includes('16:9'));
-  assert.deepEqual(view.later.map((item) => item.label), ['时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片']);
+  assert.deepEqual(view.later.map((item) => item.label), ['时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片', '周三上午']);
   assert.equal(view.laterProjects[0].status, '待办');
   assert.equal(view.later.find((item) => item.label === '后续').text, FOLLOW);
   assert.equal(view.later.find((item) => item.label === '交片').text, '虚构跟进交片句子');
+  const pendingMeeting = view.later.find((item) => item.block === '会议');
+  assert.equal(pendingMeeting.label, '周三上午');
+  assert.equal(pendingMeeting.attendance, '待参加');
+  assert.equal(pendingMeeting.text, '2026-11-25 虚构后续待参加会议句子');
+  assert(!view.done.some((item) => item.text.includes('虚构后续待参加会议句子')));
+  assert.equal(await page.evaluate(() => {
+    const heading = document.querySelector('.wreport-follow');
+    const line = document.querySelector('.wreport-later .wreport-line[data-block="会议"]');
+    return Boolean(heading.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }), true);
   assert(!view.text.slice(0, view.text.indexOf('后续工作跟进')).includes(FOLLOW));
   console.log('✓ 无周参数才回到本周；历史周按钮留在原周；块、项目状态和横竖版都分开');
 
