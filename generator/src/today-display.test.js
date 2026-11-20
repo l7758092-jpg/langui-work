@@ -61,27 +61,65 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   const item = (sel, title) => page.evaluate((s, t) => {
     const el = [...document.querySelectorAll(s + ' li')].find((li) => li.querySelector('strong') && li.querySelector('strong').textContent === t);
     if (!el) return null;
-    const lines = [...el.querySelectorAll('.day-line')].map((p) => p.textContent.trim());
-    const history = el.querySelector('.day-history');
-    return {badge: el.querySelector('.daily-kind')?.textContent || '', lines, history: history ? history.textContent : '', open: history ? history.open : false};
+    return {
+      badge: el.querySelector('.daily-kind')?.textContent || '',
+      text: el.innerText,
+      hints: [...el.querySelectorAll('.planner-hint')].map((x) => x.textContent),
+      button: el.querySelector('.detail-open')?.textContent || '',
+      historyOpen: !!el.querySelector('.day-history[open], .detail-timeline')
+    };
   }, sel, title);
+  const readDetail = () => page.evaluate(() => {
+    const dlg = document.getElementById('detailDialog');
+    const section = (name) => {
+      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
+      return h ? h.parentElement.innerText : '';
+    };
+    const history = [...dlg.querySelectorAll('.detail-history li')].map((li) => li.innerText);
+    return { progress: section('当前进度'), next: section('下一步'), req: section('具体制作要求'), day: section('当天进展'), history, dates: dlg.querySelector('.detail-dates')?.innerText || '' };
+  });
+  const openItem = async (sel, title) => {
+    await page.evaluate((s, t) => {
+      const el = [...document.querySelectorAll(s + ' li')].find((li) => li.querySelector('strong') && li.querySelector('strong').textContent === t);
+      el.querySelector('.detail-open').click();
+    }, sel, title);
+    await page.waitForSelector('#detailDialog[open]');
+  };
+  const closeDetail = async () => {
+    await page.click('#detailDialog [data-detail-close]');
+    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
+  };
   await open('?today=2026-11-18&view=home');
   const again = await item('.daily-list', '合成再修改');
   assert(again, '再修改任务应出现在今天');
   assert.equal(again.badge, '本轮安排');
-  assert(again.lines.some((l) => l.startsWith('当前进度') && l.includes('当前竖版安排')));
-  assert(again.lines.some((l) => l.startsWith('下一步') && l.includes('今天做竖版')));
-  assert(again.lines.some((l) => l.startsWith('此前已完成') && l.includes('2026-11-13')));
-  assert(!again.lines.some((l) => l.includes('初稿')));
-  assert(!again.lines.some((l) => l.includes('旧的改期说明')));
-  assert(again.history.includes('旧的改期说明') && again.history.includes('更旧的安排') && again.open === false);
+  assert.equal(again.button, '查看详情');
+  assert(again.text.includes('当前进度') && again.text.includes('当前竖版安排'));
+  assert(again.text.includes('此前已完成') && again.text.includes('2026-11-13'));
+  assert(!again.text.includes('初稿'));
+  assert(!again.text.includes('旧的改期说明'));
+  assert(!again.text.includes('今天做竖版'));
+  assert.equal(again.historyOpen, false);
+  await openItem('.daily-list', '合成再修改');
+  const againDetail = await readDetail();
+  assert(againDetail.progress.includes('当前竖版安排'));
+  assert(againDetail.next.includes('今天做竖版'));
+  assert(againDetail.dates.includes('2026-11-13'));
+  assert(againDetail.history.some((l) => l.includes('旧的改期说明')) && againDetail.history.some((l) => l.includes('更旧的安排')));
+  assert(!againDetail.progress.includes('初稿') && !againDetail.day.includes('初稿'));
+  await closeDetail();
   const progressOnly = await item('.daily-list', '合成当日进展');
-  assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.lines.some((l) => l.includes('今天才发生的进展')));
-  assert(!progressOnly.lines.some((l) => l.includes('不要当成今天的安排')));
+  assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.text.includes('今天才发生的进展'));
+  assert(!progressOnly.text.includes('不要当成今天的安排'));
+  await openItem('.daily-list', '合成当日进展');
+  const progressDetail = await readDetail();
+  assert(progressDetail.day.includes('今天才发生的进展') && !progressDetail.day.includes('不要当成今天的安排'));
+  assert(progressDetail.progress.includes('不要当成今天的安排'));
+  await closeDetail();
   const finished = await item('.daily-list', '合成当天完成');
   assert(finished && finished.badge === '已完成');
   const openTask = await item('.daily-list', '合成未完成');
-  assert(openTask && openTask.badge === '今日安排' && openTask.lines.some((l) => l.includes('未完成进度')));
+  assert(openTask && openTask.badge === '今日安排' && openTask.text.includes('未完成进度'));
   assert.equal(await item('.daily-list', '合成后天'), null);
   const titles = await page.$$eval('.planner-card h4', (els) => els.map((el) => el.textContent));
   assert(titles.includes('合成后天') && titles.includes('合成再修改'));
@@ -91,6 +129,12 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
     return {inOpen: !!li, check: li ? !!li.querySelector('.week-done-check') : false, doneGroupHas: [...document.querySelectorAll('.week-status-group.is-done li')].some((el) => el.textContent.includes('合成再修改'))};
   });
   assert(weekRow.inOpen && !weekRow.check && !weekRow.doneGroupHas);
+  const doneRow = await page.evaluate(() => {
+    const done = document.querySelector('.week-status-group.is-done');
+    const li = [...done.querySelectorAll('li')].find((el) => el.textContent.includes('合成当天完成'));
+    return {inDone: !!li, check: li ? !!li.querySelector('.week-done-check') : false, cue: li ? li.textContent.includes('详情') : false};
+  });
+  assert(doneRow.inDone && doneRow.check && doneRow.cue);
   const roundLabel = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.textContent || '');
   assert(roundLabel.includes('此前已完成') && roundLabel.includes('本轮安排') === false);
   assert(!roundLabel.includes('初稿'));
@@ -100,11 +144,27 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   const doneTicks = await page.evaluate(() => [...document.querySelectorAll('.ledger-scroll tbody tr')].filter((tr) => tr.children[1].textContent.includes('合成当天完成')).map((tr) => ({date: tr.children[0].textContent.trim(), tick: !!tr.querySelector('.ledger-tick')})));
   assert(doneTicks.some((row) => row.date === '2026-11-18' && row.tick));
   const y = await item('.yesterday-list', '合成昨天');
-  assert(y && y.lines[0].includes('昨天最新记录') && y.history.includes('昨天旧记录'));
-  assert(!y.lines.some((l) => l.includes('今天的说明不能算昨天')));
+  assert(y && y.text.includes('昨天最新记录') && !y.text.includes('昨天旧记录'));
+  assert(!y.text.includes('今天的说明不能算昨天'));
+  await openItem('.yesterday-list', '合成昨天');
+  const yDetail = await readDetail();
+  assert(yDetail.day.includes('昨天最新记录') && yDetail.day.includes('昨天旧记录'));
+  assert(!yDetail.day.includes('今天的说明不能算昨天'));
+  assert(yDetail.progress.includes('今天的说明不能算昨天'));
+  assert(yDetail.history.some((l) => l.includes('昨天旧记录')));
+  await closeDetail();
   assert((await page.$eval('.planner-yesterday li strong', (el) => el.textContent)) === '合成昨天');
-  const req = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.querySelector('.planner-requirements p')?.textContent || '');
-  assert.equal(req, '要求保留');
+  const reqCard = await page.evaluate(() => {
+    const card = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改');
+    return { hints: [...card.querySelectorAll('.planner-hint')].map((x) => x.textContent), text: card.innerText };
+  });
+  assert(reqCard.hints.includes('含制作要求') && !reqCard.text.includes('要求保留'));
+  await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改').querySelector('.detail-open').click());
+  await page.waitForSelector('#detailDialog[open]');
+  const reqDetail = await readDetail();
+  assert(reqDetail.req.includes('要求保留'));
+  assert(!reqDetail.progress.includes('要求保留') && !reqDetail.next.includes('要求保留'));
+  await closeDetail();
   console.log('✓ 新安排、当天进展、完成归属、未来计划、昨天记录和要求字段');
 
   await open('?today=2026-11-15&view=home');

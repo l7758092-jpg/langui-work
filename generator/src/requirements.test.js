@@ -61,27 +61,69 @@ const FILE = 'file://' + out;
   const card = (title) => page.evaluate((t) => {
     const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
     if (!el) return null;
-    const req = el.querySelector('.planner-requirements');
-    const prog = el.querySelector('.planner-progress p');
-    const next = el.querySelector('.planner-next p');
     return {
-      req: req ? req.querySelector('p').textContent : '',
-      reqHtml: req ? req.querySelector('p').innerHTML : '',
-      hasTag: !!el.querySelector('.planner-requirements b'),
-      progress: prog ? prog.textContent : '',
-      next: next ? next.textContent : ''
+      text: el.innerText,
+      hints: [...el.querySelectorAll('.planner-hint')].map((x) => x.textContent),
+      preview: el.querySelector('.planner-preview') ? el.querySelector('.planner-preview').textContent : '',
+      button: el.querySelector('.detail-open') ? el.querySelector('.detail-open').textContent : '',
+      hasReqBlock: !!el.querySelector('.planner-requirements, .detail-requirements')
     };
   }, title);
+  const readDetail = () => page.evaluate(() => {
+    const dlg = document.getElementById('detailDialog');
+    const section = (name) => {
+      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
+      if (!h) return { text: '', html: '' };
+      const p = h.parentElement.querySelector('p');
+      return { text: p ? p.textContent : '', html: p ? p.innerHTML : '' };
+    };
+    const req = section('具体制作要求');
+    return {
+      req: req.text,
+      reqHtml: req.html,
+      hasTag: !!dlg.querySelector('.detail-requirements b'),
+      progress: section('当前进度').text,
+      next: section('下一步').text
+    };
+  });
+  const openCard = async (title) => {
+    await page.evaluate((t) => {
+      const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
+      el.querySelector('.detail-open').click();
+    }, title);
+    await page.waitForSelector('#detailDialog[open]');
+  };
+  const closeDetail = async () => {
+    await page.click('#detailDialog [data-detail-close]');
+    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
+  };
   await open('?today=2026-11-16&view=home');
   const shown = await card('合成进度任务');
   assert(shown, '排期卡片缺失');
-  assert.equal(shown.req, REQ);
-  assert.equal(shown.hasTag, false);
-  assert(!shown.reqHtml.includes('<b>'));
-  assert.equal(shown.progress, '仅进度说明');
-  assert.equal(shown.next, '下一步保持');
+  assert.equal(shown.button, '查看详情');
+  assert(shown.hints.includes('含制作要求'));
+  assert.equal(shown.hasReqBlock, false);
+  assert(shown.preview.includes('仅进度说明'));
+  assert(!shown.text.includes('第二行'));
+  assert(!shown.text.includes('不是标签'));
+  assert(!shown.text.includes('下一步保持'));
+  await openCard('合成进度任务');
+  const shownDetail = await readDetail();
+  assert.equal(shownDetail.req, REQ);
+  assert.equal(shownDetail.hasTag, false);
+  assert(!shownDetail.reqHtml.includes('<b>'));
+  assert(!shownDetail.reqHtml.includes('</script>'));
+  assert.equal(shownDetail.progress, '仅进度说明');
+  assert.equal(shownDetail.next, '下一步保持');
+  assert(!shownDetail.progress.includes('第一行'));
+  await closeDetail();
   const plain = await card('合成无要求');
-  assert(plain && plain.req === '' && plain.progress === '旧进度不应变成要求');
+  assert(plain && plain.hasReqBlock === false && !plain.hints.includes('含制作要求') && plain.preview.includes('旧进度不应变成要求'));
+  await openCard('合成无要求');
+  const plainDetail = await readDetail();
+  assert.equal(plainDetail.req, '');
+  assert.equal(plainDetail.progress, '旧进度不应变成要求');
+  await closeDetail();
   const yEmpty = await page.$eval('.planner-yesterday .planner-empty', (el) => el.textContent);
   const yMeta = await page.$eval('.planner-yesterday small', (el) => el.textContent);
   assert.equal(yEmpty, '休息');
@@ -121,12 +163,18 @@ const FILE = 'file://' + out;
   assert.equal(await page.$eval('#total', (el) => el.textContent), '1');
   assert.equal(await page.$eval('.ledger-period strong', (el) => el.textContent), '2027年1月');
   assert.equal(await page.$$eval('.planner-requirements', (els) => els.length), 0);
+  assert.equal(await page.$$eval('.planner-hint', (els) => els.filter((el) => el.textContent === '含制作要求').length), 0);
+  assert.equal(await page.evaluate(() => document.body.innerText.includes('第一行')), false);
   const times = await page.$$eval('.planner-range time', (els) => els.map((el) => el.getAttribute('datetime')));
   assert(times.every((t) => t.startsWith('2027-01')));
   await page.click('#years a[data-month="2026-11"]');
   await page.waitForFunction(() => location.search.includes('month=2026-11'));
   assert.equal(await page.$eval('#total', (el) => el.textContent), '2');
-  assert.equal((await card('合成进度任务')).req.startsWith('第一行'), true);
+  await openCard('合成进度任务');
+  assert.equal((await readDetail()).req.startsWith('第一行'), true);
+  await closeDetail();
+  const back = await card('合成进度任务');
+  assert(back && back.preview.includes('仅进度说明') && !back.text.includes('第二行'));
   console.log('✓ 年份切换、空月、明年不冒充要求，切回 2026 后要求仍在');
 
   await page.evaluate(() => {
@@ -135,8 +183,11 @@ const FILE = 'file://' + out;
   await page.reload({waitUntil: 'load'});
   await page.waitForFunction('window.__LG_READY');
   const kept = await card('合成进度任务');
-  assert.equal(kept.progress, '本地改过的进度');
-  assert(kept.req.startsWith('第一行'));
+  assert(kept.preview.includes('本地改过的进度'));
+  assert(!kept.text.includes('第二行'));
+  await openCard('合成进度任务');
+  assert((await readDetail()).req.startsWith('第一行'));
+  await closeDetail();
   console.log('✓ 旧的本地覆盖层没有要求字段时，仍保留数据里的要求');
 
   await page.evaluate(() => localStorage.clear());
@@ -149,8 +200,12 @@ const FILE = 'file://' + out;
   await page.click('#workForm .work-button');
   await page.waitForFunction(() => !document.querySelector('dialog[open]'));
   let after = await card('合成进度任务');
-  assert.equal(after.progress, '本地新进度');
-  assert(after.req.startsWith('第一行'));
+  assert(after.preview.includes('本地新进度'));
+  assert(after.hints.includes('含制作要求'));
+  await openCard('合成进度任务');
+  assert((await readDetail()).req.startsWith('第一行'));
+  assert.equal((await readDetail()).progress, '本地新进度');
+  await closeDetail();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('langui-work-v3')).work['20260001']);
   assert(saved.requirements.startsWith('第一行'));
   assert.equal(saved.progress, '本地新进度');
@@ -159,8 +214,13 @@ const FILE = 'file://' + out;
   await page.click('#workForm .work-button');
   await page.waitForFunction(() => !document.querySelector('dialog[open]'));
   after = await card('合成进度任务');
-  assert.equal(after.req, '');
-  assert.equal(after.progress, '本地新进度');
+  assert(!after.hints.includes('含制作要求'));
+  assert(after.preview.includes('本地新进度'));
+  await openCard('合成进度任务');
+  const cleared = await readDetail();
+  assert.equal(cleared.req, '');
+  assert.equal(cleared.progress, '本地新进度');
+  await closeDetail();
   console.log('✓ 维护模式只写入 localStorage：改进度不丢要求，清空要求不改进度');
 
   assert.equal(errors.length, 0, errors.join('\n'));

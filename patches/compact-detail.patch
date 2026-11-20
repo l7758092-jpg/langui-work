@@ -1,0 +1,916 @@
+diff --git a/restore/src/app.html b/restore/src/app.html
+index 0275dfc..078a60a 100644
+--- a/restore/src/app.html
++++ b/restore/src/app.html
+@@ -101,15 +101,19 @@ ul,ol{margin:0;padding:0;list-style:none}
+ .week-status-group h4 span{color:var(--rec);font-size:10px}.week-status-group.is-done h4 span{color:var(--ok2);font-size:13px}
+ .week-status-group h4 small{margin-left:auto;font-family:var(--mono);font-weight:400;color:var(--muted)}
+ .planner-week-list{flex:1;min-height:0;overflow:auto;padding:0 10px}
+-.planner-week-list li{display:grid;grid-template-columns:minmax(0,1fr) auto 15px;gap:7px;padding:8px 1px;border-bottom:1px dashed var(--line);font-size:13px;line-height:1.45}
+-.planner-week-list li:last-child{border-bottom:0}
++.planner-week-list li{padding:0;border-bottom:0}
++.week-item-btn{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;width:100%;padding:8px 1px;border:0;border-bottom:1px dashed var(--line);background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:13px;line-height:1.45;color:inherit}
++.planner-week-list li:last-child .week-item-btn{border-bottom:0}
++.week-item-btn:hover{background:var(--acc-soft)}
+ .planner-week-list strong{font-weight:600;overflow-wrap:anywhere}
+ .planner-week-list small{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
++.week-row-end{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
++.week-detail-cue{font-size:12px;color:var(--gold)}
+ .week-done-check{color:var(--ok2);font-weight:900}
+ .week-status-empty{padding:10px;color:var(--dim);font-size:13px}
+-.planner-grid{display:grid;grid-auto-rows:max-content;gap:10px;flex:1;min-height:0;overflow:auto;align-content:start;padding-right:2px}
+-.planner-card{position:relative;background:#ffffff;border:1px solid var(--line2);border-radius:7px;padding:0 12px 12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+-.planner-card:before{content:"";display:block;height:4px;margin:0 -12px 10px;background:var(--sky)}
++.planner-grid{display:grid;grid-auto-rows:max-content;gap:8px;flex:1;min-height:0;overflow:auto;align-content:start;padding-right:2px}
++.planner-card{position:relative;background:#ffffff;border:1px solid var(--line2);border-radius:7px;padding:0 10px 6px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.04)}
++.planner-card:before{content:"";display:block;height:3px;margin:0 -10px 4px;background:var(--sky)}
+ .planner-card:has(.planner-urgent):before{background:var(--orange)}.planner-card:has(.planner-done):before{background:var(--ok)}
+ .planner-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+ .planner-card-top>div{display:flex;gap:5px;flex-wrap:wrap}
+@@ -121,9 +125,23 @@ ul,ol{margin:0;padding:0;list-style:none}
+ .planner-done{background:rgba(21,122,58,.12);color:#157a3a}
+ .planner-carry-label{background:rgba(47,94,196,.10);color:#2f5ec4}
+ .work-tag[style]{background:hsl(var(--tag-h) 45% 93%);color:hsl(var(--tag-h) 50% 28%)}
+-.planner-card h4{font-size:16px;font-weight:700;margin:7px 0 8px;line-height:1.4;overflow-wrap:anywhere}
++.planner-card h4{font-size:15px;font-weight:700;margin:2px 0;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .planner-card>a{font-size:12px;color:var(--gold)}
+ .planner-card>p{font-size:12px;color:var(--muted)}
++.planner-preview{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
++.planner-preview>span,.planner-oneline>span{color:var(--dim);margin-right:6px}
++.planner-oneline{margin:2px 0 0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
++.planner-dates{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px}
++.planner-dates .planner-original{margin:0}
++.planner-foot{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:4px}
++.planner-hints{display:flex;flex-wrap:wrap;gap:4px;margin:0}
++.planner-hint{display:inline-block;font-size:11px;line-height:18px;padding:0 7px;border-radius:4px;background:var(--chip);color:var(--muted)}
++.planner-card-actions{display:flex;flex-wrap:wrap;gap:6px;margin:0}
++.planner-card-actions .work-link,.planner-foot .detail-open{margin-top:0;height:28px;padding:0 10px;font-size:12px}
++.day-item-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
++.day-item-top strong{min-width:0;flex:1;font-weight:700;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
++.day-key{margin:3px 0 0;font-family:var(--mono);font-size:12px;color:#2f5ec4}
++.daily-list .planner-foot,.yesterday-list .planner-foot{margin-top:4px}
+ .planner-progress,.planner-next,.planner-requirements{display:grid;grid-template-columns:58px minmax(0,1fr);gap:8px;font-size:13px;line-height:1.55;margin-top:6px}
+ .planner-requirements{grid-template-columns:84px minmax(0,1fr);padding:8px;border-radius:5px;background:#f7f8fa;border-left:2px solid var(--line2)}
+ .planner-progress span,.planner-next span,.planner-requirements span{font-size:11px;color:var(--dim);padding-top:2px}
+@@ -146,7 +164,7 @@ ul,ol{margin:0;padding:0;list-style:none}
+ .video-stage-skipped{opacity:.55}
+ /* 今天 / 昨天 */
+ .daily-list,.yesterday-list{flex:1;min-height:0;overflow:auto}
+-.daily-list li,.yesterday-list li{position:relative;padding:8px 0 8px 18px;border-bottom:1px dashed var(--line);font-size:14px}
++.daily-list li,.yesterday-list li{position:relative;padding:8px 0 8px 16px;border-bottom:1px dashed var(--line);font-size:14px}
+ .daily-list li:before,.yesterday-list li:before{content:"";position:absolute;left:2px;top:15px;width:7px;height:7px;border-radius:50%;border:2px solid var(--accent)}
+ .daily-list p,.yesterday-list p{margin-top:3px;color:var(--muted);font-size:13px}
+ .day-line{display:grid;grid-template-columns:64px minmax(0,1fr);gap:6px;margin-top:4px;color:var(--ink);font-size:13px}
+@@ -310,6 +328,35 @@ td>a[data-nav]{font-size:12px;color:var(--gold);font-weight:400}
+ .work-inline{display:flex!important;align-items:center;gap:8px}
+ .work-dialog details{font-size:13px;color:var(--muted);margin:6px 0}
+ .work-dialog p{font-size:13px;color:var(--muted);margin:6px 0}
++.detail-dialog[open]{display:flex;flex-direction:column;width:min(680px,calc(100% - 24px));max-height:min(86dvh,760px);padding:0;overflow:hidden}
++.detail-sheet{display:flex;flex-direction:column;min-height:0;max-height:min(86dvh,760px)}
++.detail-dialog .work-heading{flex:0 0 auto;margin:0;padding:14px 16px 10px;border-bottom:1px solid var(--line);background:#fff}
++.detail-dialog .work-heading .detail-close{width:auto;min-width:64px;height:30px;padding:0 12px;font-size:13px}
++.detail-dialog :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
++.detail-body{overflow:auto;padding:12px 16px 18px}
++.detail-task-title{font-size:18px;font-weight:800;line-height:1.4;margin:0 0 8px;overflow-wrap:anywhere}
++.detail-badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
++.detail-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;margin:0 0 4px}
++.detail-dates div{display:grid;gap:1px;padding:6px 8px;background:#f7f8fa;border:1px solid var(--line);border-radius:5px}
++.detail-dates dt{font-size:11px;color:var(--dim)}
++.detail-dates dd{margin:0;font-family:var(--mono);font-size:13px;color:var(--ink);overflow-wrap:anywhere}
++.detail-note{margin:6px 0 0;font-size:13px;color:var(--ink)}
++.detail-block{margin-top:12px}
++.detail-block h4{font-size:13px;font-weight:700;color:var(--muted);margin:0 0 6px}
++.detail-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7;color:var(--ink)}
++.detail-requirements{padding:10px 12px;border-radius:6px;background:#f7f8fa;border-left:3px solid var(--line2)}
++.detail-next{padding:10px 12px;border-radius:6px;background:rgba(37,182,162,.07);border-left:3px solid var(--trk-edit)}
++.detail-day{padding:10px 12px;border-radius:6px;background:#fffdf8;border-left:3px solid var(--accent)}
++.detail-timeline{display:grid;gap:8px}
++.detail-timeline li{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff}
++.detail-timeline time{display:block;font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700}
++.detail-timeline p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.65;color:var(--ink)}
++.detail-empty{margin:0;color:var(--dim);font-size:13px}
++@media(max-width:720px){
++ .detail-dialog[open]{width:calc(100% - 16px)}
++ .detail-dates{grid-template-columns:1fr}
++ .planner-foot .detail-open,.planner-card-actions .work-link{height:36px;padding:0 12px;font-size:13px}
++}
+ /* 响应式 */
+ @media(max-width:860px){.ledger-filter{grid-template-columns:repeat(3,minmax(0,1fr))}.ledger-filter input[type=search],.ledger-filter button{grid-column:1/-1;width:100%}}
+ @media(max-width:720px){
+@@ -357,6 +404,7 @@ td>a[data-nav]{font-size:12px;color:var(--gold);font-weight:400}
+   <div class="langui-footer-track" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+ </footer>
+ <dialog id="workDialog" class="work-dialog"></dialog>
++<dialog id="detailDialog" class="work-dialog detail-dialog" aria-labelledby="detailTitle"></dialog>
+ <input type="file" id="importFile" accept="application/json,.json" hidden>
+ <datalist id="work-categories"><option value="公益视频"><option value="字幕与翻译"><option value="活动与汇报"><option value="行政与采购"><option value="报销"><option value="视频制作"><option value="行政"><option value="采购"><option value="汇报"><option value="团队规划"></datalist>
+ <datalist id="work-stages"><option value="脚本已确认"><option value="收集素材中"><option value="剪辑中"><option value="字幕核对中"><option value="已导出待验收"><option value="已交付"><option value="已发布"></datalist>
+diff --git a/restore/src/app.js b/restore/src/app.js
+index ecc4b6d..0568d42 100644
+--- a/restore/src/app.js
++++ b/restore/src/app.js
+@@ -267,6 +267,8 @@ function homeRequested(){ var p = params(); return !p.has('month') || p.get('vie
+ /* ── 渲染 ── */
+ var M;
+ function render(){
++  var detailDlg = $('detailDialog');
++  if (detailDlg && detailDlg.open) detailDlg.close();
+   M = model();
+   var p = params();
+   if (INITIAL_SELECTED === null){
+@@ -324,6 +326,35 @@ function workTag(row){
+   var hue = Array.from(name).reduce(function(h, c){ return (h * 31 + c.charCodeAt(0)) % 360; }, 0);
+   return '<span class="work-tag" style="--tag-h:' + hue + '">' + esc(name) + '</span>';
+ }
++function briefText(s, limit){
++  var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
++  if (!t) return '';
++  limit = limit || 48;
++  return t.length > limit ? t.slice(0, limit) + '…' : t;
++}
++function hintTags(r){
++  var bits = [];
++  if (r.requirements && String(r.requirements).trim()) bits.push('<span class="planner-hint">含制作要求</span>');
++  if (r.history && r.history.length) bits.push('<span class="planner-hint">历史 ' + r.history.length + ' 条</span>');
++  return bits.length ? '<div class="planner-hints">' + bits.join('') + '</div>' : '';
++}
++function detailButton(id, mode, day){
++  return '<button type="button" class="work-link detail-open" data-detail="' + id + '" data-detail-mode="' + mode + '"' + (day ? ' data-detail-day="' + day + '"' : '') + ' aria-haspopup="dialog">查看详情</button>';
++}
++function previewHtml(preview){
++  if (!preview || !preview.text) return '';
++  return '<p class="planner-preview">' + (preview.label ? '<span>' + esc(preview.label) + '</span>' : '') + esc(preview.text) + '</p>';
++}
++function focusPreview(r, mode, day, ev){
++  var useEvent = mode === 'yesterday' || (mode === 'today' && !(r.planned === day && (r.progress || r.nextStep)));
++  if (useEvent){
++    if (ev && ev.length && ev[0].progress) return { label: '最新进展', text: briefText(ev[0].progress) };
++    return { label: '', text: '' };
++  }
++  if (r.progress && r.progress !== '已完成') return { label: '当前进度', text: briefText(r.progress) };
++  if (r.nextStep) return { label: '下一步', text: briefText(r.nextStep) };
++  return { label: '当前进度', text: r.done ? '已完成' : '未填写进度' };
++}
+ function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" data-nav="link"' + (attrs || '') + '>' + text + '</a>'; }
+ var WD = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+ var CN = ['一','二','三','四','五'];
+@@ -346,20 +377,14 @@ function weekly(view, home){
+   var dayEntry = function(r, day, mode){
+     var ev = eventsOn(r, day), doneDay = completionDay(r), plannedToday = r.planned === day, completedToday = !!(r.done && doneDay === day);
+     var follow = !!(r.done && plannedToday && doneDay && doneDay < day);
+-    var parts = [], history = function(list){ return list.length ? '<details class="day-history"><summary>历史进展 ' + list.length + ' 条</summary>' + list.map(function(e){ return '<p>' + esc(e.progress || '') + '</p>'; }).join('') + '</details>' : ''; };
+-    if (mode === 'today' && plannedToday && (r.progress || r.nextStep)){
+-      if (r.progress) parts.push('<p class="day-line"><span>当前进度</span>' + esc(r.progress) + '</p>');
+-      if (r.nextStep) parts.push('<p class="day-line"><span>下一步</span>' + esc(r.nextStep) + '</p>');
+-      parts.push(history(ev));
+-    } else if (ev.length){
+-      parts.push('<p class="day-line"><span>最新进展</span>' + esc(ev[0].progress || '') + '</p>');
+-      parts.push(history(ev.slice(1)));
+-    }
+-    if (follow) parts.push('<p class="day-line"><span>此前已完成</span>' + esc(doneDay) + '</p>');
+     var badge = '';
+-    if (mode === 'today') badge = completedToday ? '<span class="daily-kind">已完成</span>' : (plannedToday && !r.done ? '<span class="daily-kind">今日安排</span>' : (follow ? '<span class="daily-kind">本轮安排</span>' : '<span class="daily-kind">当天进展</span>'));
+-    else if (completedToday) badge = '<span class="daily-kind">已完成</span>';
+-    return { id: r.id, title: r.title, plannedToday: plannedToday, latest: ev.length ? ev[0].id : 0, html: badge + parts.join('') };
++    if (mode === 'today') badge = completedToday ? '已完成' : (plannedToday && !r.done ? '今日安排' : (follow ? '本轮安排' : '当天进展'));
++    else if (completedToday) badge = '已完成';
++    var html = '<div class="day-item-top"><strong>' + esc(r.title) + '</strong>' + (badge ? '<span class="daily-kind">' + badge + '</span>' : '') + '</div>' +
++      previewHtml(focusPreview(r, mode, day, ev)) +
++      (follow ? '<p class="day-key">此前已完成 ' + esc(doneDay) + '</p>' : '') +
++      '<div class="planner-foot">' + hintTags(r) + detailButton(r.id, mode, day) + '</div>';
++    return { id: r.id, title: r.title, plannedToday: plannedToday, latest: ev.length ? ev[0].id : 0, html: html };
+   };
+   var yesterdayItems = [];
+   rows.forEach(function(r){
+@@ -400,6 +425,10 @@ function weekly(view, home){
+ 
+   var show = function(r){
+     var displayDate = viewDate(r), isUpdate = updated.indexOf(r) >= 0, last = r.history[r.history.length - 1];
++    var dateBits = [];
++    if (isUpdate && r.planned) dateBits.push('<p class="planner-original">' + (r.date.indexOf('交付') >= 0 ? '计划交付：' : '当前计划：') + esc(r.planned) + '</p>');
++    if (r.deadline && r.deadline !== r.planned) dateBits.push('<p class="planner-original">计划交付：' + esc(r.deadline) + '</p>');
++    if (r.originalPlan && r.originalPlan !== r.planned) dateBits.push('<p class="planner-original">原计划：' + esc(r.originalPlan) + '</p>');
+     return '<li class="planner-card"><div class="planner-card-top"><span class="' + (displayDate ? 'planner-date' : 'planner-date planner-date-empty') + '">' +
+       (displayDate ? '<time datetime="' + displayDate + '">' + dateLabel(displayDate) + '</time><small>' + WD[new Date(displayDate + 'T00:00:00Z').getUTCDay()] + '</small>' : '日期未定') + '</span><div>' +
+       workTag(r) + (isUpdate ? '<span class="planner-carry-label">本周进展</span>' : '') + (r.urgent && !r.done ? '<span class="planner-urgent">紧急</span>' : '') +
+@@ -407,14 +436,13 @@ function weekly(view, home){
+       (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (laterRound(r) ? '<span class="planner-carry-label">此前已完成</span>' : (r.done ? '<span class="planner-done">已完成</span>' : '')) + '</div></div>' +
+       '<h4>' + esc(r.title) + '</h4>' + (r.videoStage ? videoStageLine(r.videoStage) : '') +
+       (r.project ? archiveLink('?project=' + encodeURIComponent(r.project) + '#archive', esc(r.project)) : '') +
+-      (last && last.waiting ? '<p>等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p>下次跟进：' + esc(last.followUp) + '</p>' : '') +
+-      (r.requirements ? '<div class="planner-requirements"><span>具体制作要求</span><p>' + esc(r.requirements) + '</p></div>' : '') +
+-      '<div class="planner-progress"><span>当前进度</span><p>' + esc(r.progress || (r.done ? '已完成' : '未填写进度')) + '</p></div>' +
+-      (r.nextStep ? '<div class="planner-next"><span>下一步</span><p>' + esc(r.nextStep) + '</p></div>' : '') +
+-      (isUpdate && r.planned ? '<p class="planner-original">' + (r.date.indexOf('交付') >= 0 ? '计划交付：' : '当前计划：') + r.planned + '</p>' : '') +
+-      (r.deadline && r.deadline !== r.planned ? '<p class="planner-original">计划交付：' + r.deadline + '</p>' : '') +
+-      (r.originalPlan && r.originalPlan !== r.planned ? '<p class="planner-original">原计划：' + r.originalPlan + '</p>' : '') +
+-      (EDIT ? '<button class="work-link" data-edit="' + r.id + '" data-week="' + week + '">详情／更新</button>' : '') + '</li>';
++      (last && last.waiting ? '<p class="planner-oneline"><span>等待</span>' + esc(briefText(last.waiting, 36)) + '</p>' : '') +
++      (last && last.followUp ? '<p class="planner-oneline"><span>下次跟进</span>' + esc(last.followUp) + '</p>' : '') +
++      previewHtml(focusPreview(r, 'schedule', '', [])) +
++      (dateBits.length ? '<div class="planner-dates">' + dateBits.join('') + '</div>' : '') +
++      '<div class="planner-foot">' + hintTags(r) +
++      '<div class="planner-card-actions">' + detailButton(r.id, 'schedule', '') +
++      (EDIT ? '<button type="button" class="work-link" data-edit="' + r.id + '" data-week="' + week + '">详情／更新</button>' : '') + '</div></div></li>';
+   };
+ 
+   if (view === 'week' && home){
+@@ -431,14 +459,15 @@ function weekly(view, home){
+       var items = weekItems.filter(function(r){ return laterRound(r) ? !g.done : r.done === g.done; });
+       return '<section class="week-status-group ' + (g.done ? 'is-done' : 'is-open') + '" aria-label="' + g.label + '"><h4><span>' + (g.done ? '✓' : '●') + '</span>' + g.label + '<small>' + items.length + ' 项</small></h4>' +
+         (items.length ? '<ul class="planner-week-list">' + items.map(function(r){ var d = viewDate(r) || completionDay(r); var doneDay = completionDay(r);
+-          return '<li' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done && doneDay && inWeek(doneDay) && !laterRound(r) ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
++          var checked = r.done && doneDay && inWeek(doneDay) && !laterRound(r);
++          return '<li><button type="button" class="week-item-btn" data-detail="' + r.id + '" data-detail-mode="week"' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong><small>' + (d ? d.slice(5).replace('-', '月') + '日' : '') + '</small><span class="week-row-end">' + (checked ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '<span class="week-detail-cue">详情</span></span></button></li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
+     }).join('') + '</div></section>';
+     out += '<section class="planner-group planner-week-schedule"><h3>本周排期 <small>' + dated.length + ' 项</small></h3>' + (dated.length ? '<ul class="planner-grid">' + dated.map(show).join('') + '</ul>' : '<p class="planner-empty">暂无排期</p>') + '</section>';
+     var liveYear = archiveMonth().slice(0,4) === today.slice(0,4);
+     var todayBody = todayItems.length ? '<ul class="daily-list">' + todayItems.map(function(it){
+-      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
++      return '<li>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
+     var yesterdayBody = yesterdayItems.length ? '<ul class="yesterday-list">' + yesterdayItems.map(function(it){
+-      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
++      return '<li>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
+     var todayMeta = today.slice(5).replace('-', '/') + ' · ' + todayItems.length + ' 项';
+     var yesterdayMeta = yesterday.slice(5).replace('-', '/') + ' · ' + yesterdayItems.length + ' 项';
+     if (!liveYear){
+@@ -596,6 +625,64 @@ function deliveryOverview(){
+   return o;
+ }
+ 
++function historyNewest(list){
++  return (list || []).slice().sort(function(a, b){ return b.day.localeCompare(a.day) || b.id - a.id; });
++}
++function timelineHtml(list){
++  if (!list.length) return '<p class="detail-empty">暂无进展记录</p>';
++  return '<ol class="detail-timeline">' + list.map(function(e){
++    return '<li><time datetime="' + esc(e.day) + '">' + esc(e.day) + (e.done ? ' · 已完成' : '') + '</time><p>' + esc(e.progress || '') + '</p></li>';
++  }).join('') + '</ol>';
++}
++function rememberScroll(){
++  ui.scrollSnap = {
++    x: window.scrollX, y: window.scrollY,
++    nodes: Array.prototype.map.call(document.querySelectorAll('.planner-grid,.daily-list,.yesterday-list,.planner-week-list,.ledger-scroll'), function(el){ return { el: el, top: el.scrollTop }; })
++  };
++}
++function restoreScroll(){
++  var s = ui.scrollSnap; if (!s) return;
++  window.scrollTo(s.x, s.y);
++  s.nodes.forEach(function(n){ if (n.el && n.el.isConnected) n.el.scrollTop = n.top; });
++}
++function openDetail(id, mode, day){
++  var row = M.rows.filter(function(r){ return r.id === id; })[0];
++  var dlg = $('detailDialog');
++  if (!row || !dlg) return;
++  var doneDay = completionDay(row);
++  var badges = [];
++  if (row.urgent && !row.done) badges.push('<span class="planner-urgent">紧急</span>');
++  if (laterRound(row)) badges.push('<span class="planner-carry-label">此前已完成</span>');
++  else if (row.done) badges.push('<span class="planner-done">已完成</span>');
++  if (mode === 'today'){
++    var plannedToday = row.planned === day, completedToday = !!(row.done && doneDay === day);
++    var follow = !!(row.done && plannedToday && doneDay && doneDay < day);
++    var kind = completedToday ? '已完成' : (plannedToday && !row.done ? '今日安排' : (follow ? '本轮安排' : '当天进展'));
++    badges.push('<span class="daily-kind">' + kind + '</span>');
++  } else if (mode === 'yesterday' && row.done && doneDay === day) badges.push('<span class="daily-kind">已完成</span>');
++  if (row.review) badges.push('<span class="work-tag">' + esc(row.review) + '</span>');
++  var tag = workTag(row); if (tag) badges.push(tag);
++  var dateCell = function(label, value){ return '<div><dt>' + label + '</dt><dd>' + esc(value) + '</dd></div>'; };
++  var dates = dateCell('计划日', row.planned || '未定') + dateCell('计划交付', row.deadline || '未定') + dateCell('原计划', row.originalPlan || '未定') + dateCell('完成日', (row.done && doneDay) ? doneDay : '未完成');
++  var last = row.history[row.history.length - 1];
++  var extra = (last && last.waiting ? '<p class="detail-note">等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p class="detail-note">下次跟进：' + esc(last.followUp) + '</p>' : '');
++  var dayEvents = (day && (mode === 'today' || mode === 'yesterday')) ? historyNewest((row.history || []).filter(function(e){ return e.day === day; })) : [];
++  var dayBlock = (mode === 'today' || mode === 'yesterday') ? '<section class="detail-block detail-day"><h4>当天进展</h4>' + (dayEvents.length ? timelineHtml(dayEvents) : '<p class="detail-empty">当天没有单独的进展记录</p>') + '</section>' : '';
++  var progress = '<section class="detail-block detail-progress"><h4>当前进度</h4><p class="detail-text">' + esc(row.progress || (row.done ? '已完成' : '未填写进度')) + '</p></section>';
++  var next = row.nextStep ? '<section class="detail-block detail-next"><h4>下一步</h4><p class="detail-text">' + esc(row.nextStep) + '</p></section>' : '';
++  var req = row.requirements && String(row.requirements).trim() ? '<section class="detail-block detail-requirements"><h4>具体制作要求</h4><p class="detail-text">' + esc(row.requirements) + '</p></section>' : '';
++  var stages = row.videoStage ? '<section class="detail-block"><h4>视频制作进度</h4>' + videoStageLine(row.videoStage) + '</section>' : '';
++  var hist = '<section class="detail-block detail-history"><h4>进展记录</h4>' + timelineHtml(historyNewest(row.history)) + '</section>';
++  dlg.innerHTML = '<div class="detail-sheet"><div class="work-heading"><h2 id="detailTitle">工作详情</h2><button type="button" class="detail-close" data-detail-close>关闭</button></div><div class="detail-body"><h3 class="detail-task-title">' + esc(row.title) + '</h3>' +
++    (badges.length ? '<div class="detail-badges">' + badges.join('') + '</div>' : '') + '<dl class="detail-dates">' + dates + '</dl>' + extra + stages + dayBlock + progress + next + req + hist + '</div></div>';
++  if (dlg.open) dlg.close();
++  ui.detailOpener = document.activeElement;
++  rememberScroll();
++  dlg.showModal();
++  restoreScroll();
++  var closeBtn = dlg.querySelector('[data-detail-close]');
++  if (closeBtn) closeBtn.focus();
++}
+ /* WorkEditor（旧站组件；旧站页面未挂载，只在 ?edit=1 维护模式出现） */
+ var STAGE_OPTIONS = ['脚本已确认','收集素材中','剪辑中','字幕核对中','已导出待验收','已交付','已发布'];
+ var CATEGORY_OPTIONS = ['公益视频','字幕与翻译','活动与汇报','行政与采购','报销','视频制作','行政','采购','汇报','团队规划'];
+@@ -680,9 +767,20 @@ document.addEventListener('click', function(e){
+   if (act === 'close-dialog'){ $('workDialog').close(); return; }
+   if (act === 'export'){ exportBackup(); return; }
+   if (act === 'import'){ $('importFile').click(); return; }
+-  if (b.dataset.edit){ openEditor(Number(b.dataset.edit), b.dataset.week || null); return; }
++  if ('detailClose' in b.dataset){ $('detailDialog').close(); return; }
++  if (b.dataset.detail){ openDetail(Number(b.dataset.detail), b.dataset.detailMode || 'schedule', b.dataset.detailDay || ''); return; }
++  if (b.dataset.edit){ var detailOpen = $('detailDialog'); if (detailOpen && detailOpen.open) detailOpen.close(); openEditor(Number(b.dataset.edit), b.dataset.week || null); return; }
+   if (b.dataset.new){ openEditor(null, b.dataset.week || null); return; }
+ });
++var detailDialog = $('detailDialog');
++if (detailDialog){
++  detailDialog.addEventListener('close', function(){
++    restoreScroll();
++    var opener = ui.detailOpener; ui.detailOpener = null;
++    if (opener && opener.isConnected && opener.focus) opener.focus();
++  });
++  detailDialog.addEventListener('click', function(e){ if (e.target === detailDialog) detailDialog.close(); });
++}
+ function copy(text){
+   if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).catch(fallback);
+   return fallback();
+diff --git a/restore/src/requirements.test.js b/restore/src/requirements.test.js
+index efe9041..f6c068c 100644
+--- a/restore/src/requirements.test.js
++++ b/restore/src/requirements.test.js
+@@ -61,27 +61,69 @@ const FILE = 'file://' + out;
+   const card = (title) => page.evaluate((t) => {
+     const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
+     if (!el) return null;
+-    const req = el.querySelector('.planner-requirements');
+-    const prog = el.querySelector('.planner-progress p');
+-    const next = el.querySelector('.planner-next p');
+     return {
+-      req: req ? req.querySelector('p').textContent : '',
+-      reqHtml: req ? req.querySelector('p').innerHTML : '',
+-      hasTag: !!el.querySelector('.planner-requirements b'),
+-      progress: prog ? prog.textContent : '',
+-      next: next ? next.textContent : ''
++      text: el.innerText,
++      hints: [...el.querySelectorAll('.planner-hint')].map((x) => x.textContent),
++      preview: el.querySelector('.planner-preview') ? el.querySelector('.planner-preview').textContent : '',
++      button: el.querySelector('.detail-open') ? el.querySelector('.detail-open').textContent : '',
++      hasReqBlock: !!el.querySelector('.planner-requirements, .detail-requirements')
+     };
+   }, title);
++  const readDetail = () => page.evaluate(() => {
++    const dlg = document.getElementById('detailDialog');
++    const section = (name) => {
++      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
++      if (!h) return { text: '', html: '' };
++      const p = h.parentElement.querySelector('p');
++      return { text: p ? p.textContent : '', html: p ? p.innerHTML : '' };
++    };
++    const req = section('具体制作要求');
++    return {
++      req: req.text,
++      reqHtml: req.html,
++      hasTag: !!dlg.querySelector('.detail-requirements b'),
++      progress: section('当前进度').text,
++      next: section('下一步').text
++    };
++  });
++  const openCard = async (title) => {
++    await page.evaluate((t) => {
++      const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
++      el.querySelector('.detail-open').click();
++    }, title);
++    await page.waitForSelector('#detailDialog[open]');
++  };
++  const closeDetail = async () => {
++    await page.click('#detailDialog [data-detail-close]');
++    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
++  };
+   await open('?today=2026-11-16&view=home');
+   const shown = await card('合成进度任务');
+   assert(shown, '排期卡片缺失');
+-  assert.equal(shown.req, REQ);
+-  assert.equal(shown.hasTag, false);
+-  assert(!shown.reqHtml.includes('<b>'));
+-  assert.equal(shown.progress, '仅进度说明');
+-  assert.equal(shown.next, '下一步保持');
++  assert.equal(shown.button, '查看详情');
++  assert(shown.hints.includes('含制作要求'));
++  assert.equal(shown.hasReqBlock, false);
++  assert(shown.preview.includes('仅进度说明'));
++  assert(!shown.text.includes('第二行'));
++  assert(!shown.text.includes('不是标签'));
++  assert(!shown.text.includes('下一步保持'));
++  await openCard('合成进度任务');
++  const shownDetail = await readDetail();
++  assert.equal(shownDetail.req, REQ);
++  assert.equal(shownDetail.hasTag, false);
++  assert(!shownDetail.reqHtml.includes('<b>'));
++  assert(!shownDetail.reqHtml.includes('</script>'));
++  assert.equal(shownDetail.progress, '仅进度说明');
++  assert.equal(shownDetail.next, '下一步保持');
++  assert(!shownDetail.progress.includes('第一行'));
++  await closeDetail();
+   const plain = await card('合成无要求');
+-  assert(plain && plain.req === '' && plain.progress === '旧进度不应变成要求');
++  assert(plain && plain.hasReqBlock === false && !plain.hints.includes('含制作要求') && plain.preview.includes('旧进度不应变成要求'));
++  await openCard('合成无要求');
++  const plainDetail = await readDetail();
++  assert.equal(plainDetail.req, '');
++  assert.equal(plainDetail.progress, '旧进度不应变成要求');
++  await closeDetail();
+   const yEmpty = await page.$eval('.planner-yesterday .planner-empty', (el) => el.textContent);
+   const yMeta = await page.$eval('.planner-yesterday small', (el) => el.textContent);
+   assert.equal(yEmpty, '休息');
+@@ -121,12 +163,18 @@ const FILE = 'file://' + out;
+   assert.equal(await page.$eval('#total', (el) => el.textContent), '1');
+   assert.equal(await page.$eval('.ledger-period strong', (el) => el.textContent), '2027年1月');
+   assert.equal(await page.$$eval('.planner-requirements', (els) => els.length), 0);
++  assert.equal(await page.$$eval('.planner-hint', (els) => els.filter((el) => el.textContent === '含制作要求').length), 0);
++  assert.equal(await page.evaluate(() => document.body.innerText.includes('第一行')), false);
+   const times = await page.$$eval('.planner-range time', (els) => els.map((el) => el.getAttribute('datetime')));
+   assert(times.every((t) => t.startsWith('2027-01')));
+   await page.click('#years a[data-month="2026-11"]');
+   await page.waitForFunction(() => location.search.includes('month=2026-11'));
+   assert.equal(await page.$eval('#total', (el) => el.textContent), '2');
+-  assert.equal((await card('合成进度任务')).req.startsWith('第一行'), true);
++  await openCard('合成进度任务');
++  assert.equal((await readDetail()).req.startsWith('第一行'), true);
++  await closeDetail();
++  const back = await card('合成进度任务');
++  assert(back && back.preview.includes('仅进度说明') && !back.text.includes('第二行'));
+   console.log('✓ 年份切换、空月、明年不冒充要求，切回 2026 后要求仍在');
+ 
+   await page.evaluate(() => {
+@@ -135,8 +183,11 @@ const FILE = 'file://' + out;
+   await page.reload({waitUntil: 'load'});
+   await page.waitForFunction('window.__LG_READY');
+   const kept = await card('合成进度任务');
+-  assert.equal(kept.progress, '本地改过的进度');
+-  assert(kept.req.startsWith('第一行'));
++  assert(kept.preview.includes('本地改过的进度'));
++  assert(!kept.text.includes('第二行'));
++  await openCard('合成进度任务');
++  assert((await readDetail()).req.startsWith('第一行'));
++  await closeDetail();
+   console.log('✓ 旧的本地覆盖层没有要求字段时，仍保留数据里的要求');
+ 
+   await page.evaluate(() => localStorage.clear());
+@@ -149,8 +200,12 @@ const FILE = 'file://' + out;
+   await page.click('#workForm .work-button');
+   await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+   let after = await card('合成进度任务');
+-  assert.equal(after.progress, '本地新进度');
+-  assert(after.req.startsWith('第一行'));
++  assert(after.preview.includes('本地新进度'));
++  assert(after.hints.includes('含制作要求'));
++  await openCard('合成进度任务');
++  assert((await readDetail()).req.startsWith('第一行'));
++  assert.equal((await readDetail()).progress, '本地新进度');
++  await closeDetail();
+   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('langui-work-v3')).work['20260001']);
+   assert(saved.requirements.startsWith('第一行'));
+   assert.equal(saved.progress, '本地新进度');
+@@ -159,8 +214,13 @@ const FILE = 'file://' + out;
+   await page.click('#workForm .work-button');
+   await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+   after = await card('合成进度任务');
+-  assert.equal(after.req, '');
+-  assert.equal(after.progress, '本地新进度');
++  assert(!after.hints.includes('含制作要求'));
++  assert(after.preview.includes('本地新进度'));
++  await openCard('合成进度任务');
++  const cleared = await readDetail();
++  assert.equal(cleared.req, '');
++  assert.equal(cleared.progress, '本地新进度');
++  await closeDetail();
+   console.log('✓ 维护模式只写入 localStorage：改进度不丢要求，清空要求不改进度');
+ 
+   assert.equal(errors.length, 0, errors.join('\n'));
+diff --git a/restore/src/today-display.test.js b/restore/src/today-display.test.js
+index a1e346b..12baaaf 100644
+--- a/restore/src/today-display.test.js
++++ b/restore/src/today-display.test.js
+@@ -61,27 +61,65 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
+   const item = (sel, title) => page.evaluate((s, t) => {
+     const el = [...document.querySelectorAll(s + ' li')].find((li) => li.querySelector('strong') && li.querySelector('strong').textContent === t);
+     if (!el) return null;
+-    const lines = [...el.querySelectorAll('.day-line')].map((p) => p.textContent.trim());
+-    const history = el.querySelector('.day-history');
+-    return {badge: el.querySelector('.daily-kind')?.textContent || '', lines, history: history ? history.textContent : '', open: history ? history.open : false};
++    return {
++      badge: el.querySelector('.daily-kind')?.textContent || '',
++      text: el.innerText,
++      hints: [...el.querySelectorAll('.planner-hint')].map((x) => x.textContent),
++      button: el.querySelector('.detail-open')?.textContent || '',
++      historyOpen: !!el.querySelector('.day-history[open], .detail-timeline')
++    };
+   }, sel, title);
++  const readDetail = () => page.evaluate(() => {
++    const dlg = document.getElementById('detailDialog');
++    const section = (name) => {
++      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
++      return h ? h.parentElement.innerText : '';
++    };
++    const history = [...dlg.querySelectorAll('.detail-history li')].map((li) => li.innerText);
++    return { progress: section('当前进度'), next: section('下一步'), req: section('具体制作要求'), day: section('当天进展'), history, dates: dlg.querySelector('.detail-dates')?.innerText || '' };
++  });
++  const openItem = async (sel, title) => {
++    await page.evaluate((s, t) => {
++      const el = [...document.querySelectorAll(s + ' li')].find((li) => li.querySelector('strong') && li.querySelector('strong').textContent === t);
++      el.querySelector('.detail-open').click();
++    }, sel, title);
++    await page.waitForSelector('#detailDialog[open]');
++  };
++  const closeDetail = async () => {
++    await page.click('#detailDialog [data-detail-close]');
++    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
++  };
+   await open('?today=2026-11-18&view=home');
+   const again = await item('.daily-list', '合成再修改');
+   assert(again, '再修改任务应出现在今天');
+   assert.equal(again.badge, '本轮安排');
+-  assert(again.lines.some((l) => l.startsWith('当前进度') && l.includes('当前竖版安排')));
+-  assert(again.lines.some((l) => l.startsWith('下一步') && l.includes('今天做竖版')));
+-  assert(again.lines.some((l) => l.startsWith('此前已完成') && l.includes('2026-11-13')));
+-  assert(!again.lines.some((l) => l.includes('初稿')));
+-  assert(!again.lines.some((l) => l.includes('旧的改期说明')));
+-  assert(again.history.includes('旧的改期说明') && again.history.includes('更旧的安排') && again.open === false);
++  assert.equal(again.button, '查看详情');
++  assert(again.text.includes('当前进度') && again.text.includes('当前竖版安排'));
++  assert(again.text.includes('此前已完成') && again.text.includes('2026-11-13'));
++  assert(!again.text.includes('初稿'));
++  assert(!again.text.includes('旧的改期说明'));
++  assert(!again.text.includes('今天做竖版'));
++  assert.equal(again.historyOpen, false);
++  await openItem('.daily-list', '合成再修改');
++  const againDetail = await readDetail();
++  assert(againDetail.progress.includes('当前竖版安排'));
++  assert(againDetail.next.includes('今天做竖版'));
++  assert(againDetail.dates.includes('2026-11-13'));
++  assert(againDetail.history.some((l) => l.includes('旧的改期说明')) && againDetail.history.some((l) => l.includes('更旧的安排')));
++  assert(!againDetail.progress.includes('初稿') && !againDetail.day.includes('初稿'));
++  await closeDetail();
+   const progressOnly = await item('.daily-list', '合成当日进展');
+-  assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.lines.some((l) => l.includes('今天才发生的进展')));
+-  assert(!progressOnly.lines.some((l) => l.includes('不要当成今天的安排')));
++  assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.text.includes('今天才发生的进展'));
++  assert(!progressOnly.text.includes('不要当成今天的安排'));
++  await openItem('.daily-list', '合成当日进展');
++  const progressDetail = await readDetail();
++  assert(progressDetail.day.includes('今天才发生的进展') && !progressDetail.day.includes('不要当成今天的安排'));
++  assert(progressDetail.progress.includes('不要当成今天的安排'));
++  await closeDetail();
+   const finished = await item('.daily-list', '合成当天完成');
+   assert(finished && finished.badge === '已完成');
+   const openTask = await item('.daily-list', '合成未完成');
+-  assert(openTask && openTask.badge === '今日安排' && openTask.lines.some((l) => l.includes('未完成进度')));
++  assert(openTask && openTask.badge === '今日安排' && openTask.text.includes('未完成进度'));
+   assert.equal(await item('.daily-list', '合成后天'), null);
+   const titles = await page.$$eval('.planner-card h4', (els) => els.map((el) => el.textContent));
+   assert(titles.includes('合成后天') && titles.includes('合成再修改'));
+@@ -91,6 +129,12 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
+     return {inOpen: !!li, check: li ? !!li.querySelector('.week-done-check') : false, doneGroupHas: [...document.querySelectorAll('.week-status-group.is-done li')].some((el) => el.textContent.includes('合成再修改'))};
+   });
+   assert(weekRow.inOpen && !weekRow.check && !weekRow.doneGroupHas);
++  const doneRow = await page.evaluate(() => {
++    const done = document.querySelector('.week-status-group.is-done');
++    const li = [...done.querySelectorAll('li')].find((el) => el.textContent.includes('合成当天完成'));
++    return {inDone: !!li, check: li ? !!li.querySelector('.week-done-check') : false, cue: li ? li.textContent.includes('详情') : false};
++  });
++  assert(doneRow.inDone && doneRow.check && doneRow.cue);
+   const roundLabel = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.textContent || '');
+   assert(roundLabel.includes('此前已完成') && roundLabel.includes('本轮安排') === false);
+   assert(!roundLabel.includes('初稿'));
+@@ -100,11 +144,27 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
+   const doneTicks = await page.evaluate(() => [...document.querySelectorAll('.ledger-scroll tbody tr')].filter((tr) => tr.children[1].textContent.includes('合成当天完成')).map((tr) => ({date: tr.children[0].textContent.trim(), tick: !!tr.querySelector('.ledger-tick')})));
+   assert(doneTicks.some((row) => row.date === '2026-11-18' && row.tick));
+   const y = await item('.yesterday-list', '合成昨天');
+-  assert(y && y.lines[0].includes('昨天最新记录') && y.history.includes('昨天旧记录'));
+-  assert(!y.lines.some((l) => l.includes('今天的说明不能算昨天')));
++  assert(y && y.text.includes('昨天最新记录') && !y.text.includes('昨天旧记录'));
++  assert(!y.text.includes('今天的说明不能算昨天'));
++  await openItem('.yesterday-list', '合成昨天');
++  const yDetail = await readDetail();
++  assert(yDetail.day.includes('昨天最新记录') && yDetail.day.includes('昨天旧记录'));
++  assert(!yDetail.day.includes('今天的说明不能算昨天'));
++  assert(yDetail.progress.includes('今天的说明不能算昨天'));
++  assert(yDetail.history.some((l) => l.includes('昨天旧记录')));
++  await closeDetail();
+   assert((await page.$eval('.planner-yesterday li strong', (el) => el.textContent)) === '合成昨天');
+-  const req = await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改')?.querySelector('.planner-requirements p')?.textContent || '');
+-  assert.equal(req, '要求保留');
++  const reqCard = await page.evaluate(() => {
++    const card = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改');
++    return { hints: [...card.querySelectorAll('.planner-hint')].map((x) => x.textContent), text: card.innerText };
++  });
++  assert(reqCard.hints.includes('含制作要求') && !reqCard.text.includes('要求保留'));
++  await page.evaluate(() => [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改').querySelector('.detail-open').click());
++  await page.waitForSelector('#detailDialog[open]');
++  const reqDetail = await readDetail();
++  assert(reqDetail.req.includes('要求保留'));
++  assert(!reqDetail.progress.includes('要求保留') && !reqDetail.next.includes('要求保留'));
++  await closeDetail();
+   console.log('✓ 新安排、当天进展、完成归属、未来计划、昨天记录和要求字段');
+ 
+   await open('?today=2026-11-15&view=home');
+diff --git a/restore/src/compact-detail.test.js b/restore/src/compact-detail.test.js
+new file mode 100644
+index 0000000..28b247e
+--- /dev/null
++++ b/restore/src/compact-detail.test.js
+@@ -0,0 +1,307 @@
++// 合成数据：长记录默认只显示重点，点击「查看详情」再看全文。不读取真实工作库。
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const {spawnSync} = require('child_process');
++const assert = require('assert');
++
++const puppeteerPath = process.env.PUPPETEER_CORE
++  || (() => { try { return require.resolve('puppeteer-core'); } catch (e) { return '/workspace/langui/test/node_modules/puppeteer-core'; } })();
++const puppeteer = require(puppeteerPath);
++const chrome = ['/usr/bin/google-chrome', '/usr/local/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
++assert(chrome, '找不到 Chrome');
++
++const fill = (ch, n) => ch.repeat(n);
++const PROGRESS = fill('进', 90) + 'PROGRESS_TAIL';
++const NEXT = fill('下', 90) + 'NEXT_TAIL';
++const REQ = '要求甲\n要求乙 <b>不是标签</b> 以及 </script>' + fill('求', 40) + 'REQ_TAIL';
++const EVENT_NEW = fill('新', 80) + 'EVENT_NEW_TAIL';
++const EVENT_OLD = fill('旧', 40) + 'EVENT_OLD_TAIL';
++const EVENT_OLDER = fill('更', 24) + 'EVENT_OLDER_TAIL';
++const NOTE = fill('注', 90) + 'NOTE_NOT_YDAY';
++const Y_NEW = fill('昨', 80) + 'YDAY_NEW_TAIL';
++const Y_OLD = fill('史', 40) + 'YDAY_OLD_TAIL';
++const Y_OLDER = fill('早', 24) + 'YDAY_OLDER_TAIL';
++
++const srcDir = __dirname;
++const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-compact-'));
++fs.mkdirSync(path.join(root, 'restore', 'src'), {recursive: true});
++fs.mkdirSync(path.join(root, 'build'), {recursive: true});
++for (const name of ['app.js', 'app.html', 'build.py']) fs.copyFileSync(path.join(srcDir, name), path.join(root, 'restore', 'src', name));
++const task = (extra) => Object.assign({
++  hidden: false, week: null, originalPlan: null, deadline: null, next: null, monthNotes: [], stages: null, shoot: null,
++  initial: null, history: [], urgent: false, src: 'synthetic', handover: null, requirements: null, done: false, completed: null
++}, extra);
++const data = {
++  version: 'synthetic',
++  tasks: [
++    task({id: 101, title: '合成重点甲', month: '2026-11', dateText: '11月18日', note: PROGRESS, plan: '2026-11-18', next: NEXT, requirements: REQ, recordDay: '2026-11-18', sortDay: '2026-11-18', events: [
++      {seq: 8, day: '2026-11-01', text: EVENT_OLDER, done: false},
++      {seq: 9, day: '2026-11-18', text: EVENT_OLD, done: false},
++      {seq: 10, day: '2026-11-18', text: EVENT_NEW, done: false}
++    ]}),
++    task({id: 102, title: '合成重点乙', month: '2026-11', dateText: '11月18日', note: fill('乙', 120) + 'TAIL_B', plan: '2026-11-18', next: fill('步', 80), requirements: fill('求', 60), recordDay: '2026-11-18', sortDay: '2026-11-18', events: [{seq: 20, day: '2026-11-18', text: fill('事', 70), done: false}]}),
++    task({id: 103, title: '合成重点丙', month: '2026-11', dateText: '11月18日', note: fill('丙', 120) + 'TAIL_C', plan: '2026-11-18', recordDay: '2026-11-18', sortDay: '2026-11-18', events: []}),
++    task({id: 104, title: '合成重点丁', month: '2026-11', dateText: '11月18日', note: fill('丁', 120) + 'TAIL_D', plan: '2026-11-18', recordDay: '2026-11-18', sortDay: '2026-11-18', events: []}),
++    task({id: 105, title: '合成昨天重点', month: '2026-11', dateText: '11月16日', note: NOTE, plan: '2026-11-16', originalPlan: '2026-11-02', deadline: '2026-11-30', next: NEXT, requirements: REQ, recordDay: '2026-11-16', sortDay: '2026-11-16', events: [
++      {seq: 1, day: '2026-11-10', text: Y_OLDER, done: false},
++      {seq: 2, day: '2026-11-17', text: Y_OLD, done: false},
++      {seq: 3, day: '2026-11-17', text: Y_NEW, done: false}
++    ]})
++  ],
++  social: [],
++  platforms: []
++};
++const dataPath = path.join(root, 'build', 'data.json');
++fs.writeFileSync(dataPath, JSON.stringify(data));
++const out = path.join(root, 'restore', 'out.html');
++const built = spawnSync('python3', [path.join(srcDir, 'build.py')], {env: Object.assign({}, process.env, {
++  LANGUI_ROOT: root, LANGUI_DATA: dataPath, LANGUI_HTML: out,
++  LANGUI_PORTRAIT_URI: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
++})});
++if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.toString()); process.exit(1); }
++const html = fs.readFileSync(out, 'utf8');
++assert.equal((html.match(/<script>/g) || []).length, 2, '要求里的 script 结束标记不得截断页面脚本');
++assert(!html.includes(PROGRESS) || html.includes('\\/script') || html.includes('<\\/'), '长文本可以进数据，但不得以未转义的脚本结束标记截断页面');
++
++(async () => {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lg-compact-chrome-'));
++  const browser = await puppeteer.launch({executablePath: chrome, headless: 'new', userDataDir: dir, args: ['--no-sandbox', '--disable-dev-shm-usage']});
++  const page = await browser.newPage();
++  const errors = [];
++  page.on('pageerror', (err) => errors.push(String(err)));
++  const open = async (q) => {
++    await page.goto('file://' + out + q, {waitUntil: 'load'});
++    await page.waitForFunction('window.__LG_READY');
++  };
++  const readDetail = () => page.evaluate(() => {
++    const dlg = document.getElementById('detailDialog');
++    const section = (name) => {
++      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
++      if (!h) return { text: '', html: '' };
++      const p = h.parentElement.querySelector('p.detail-text, p.detail-empty');
++      return { text: h.parentElement.innerText, body: p ? p.textContent : '', html: p ? p.innerHTML : '' };
++    };
++    const items = (sel) => [...dlg.querySelectorAll(sel + ' li')].map((li) => ({
++      day: li.querySelector('time') ? li.querySelector('time').getAttribute('datetime') : '',
++      text: li.innerText
++    }));
++    return {
++      title: dlg.querySelector('.detail-task-title').textContent,
++      headings: [...dlg.querySelectorAll('h4')].map((h) => h.textContent.trim()),
++      progress: section('当前进度'),
++      next: section('下一步'),
++      req: section('具体制作要求'),
++      day: section('当天进展'),
++      history: items('.detail-history'),
++      dayItems: items('.detail-day'),
++      dates: dlg.querySelector('.detail-dates').innerText,
++      workOpen: document.getElementById('workDialog').open
++    };
++  });
++  const closeDetail = async () => {
++    await page.click('#detailDialog [data-detail-close]');
++    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
++  };
++
++  await page.setViewport({width: 1440, height: 900});
++  await open('?today=2026-11-18&view=home');
++  const desk = await page.evaluate(() => {
++    const col = document.querySelector('.planner-week-schedule');
++    const grid = col.querySelector('.planner-grid');
++    const today = document.querySelector('.planner-today .daily-list');
++    const box = grid.getBoundingClientRect();
++    const cards = [...grid.querySelectorAll('.planner-card')].map((el) => {
++      const r = el.getBoundingClientRect();
++      return {
++        h: el.offsetHeight,
++        title: el.querySelector('h4').textContent,
++        full: r.top >= box.top - 1 && r.bottom <= box.bottom + 1,
++        seen: r.top < box.bottom - 8 && r.bottom > box.top + 8
++      };
++    });
++    const tbox = today.getBoundingClientRect();
++    const todays = [...today.querySelectorAll('li')].map((el) => {
++      const r = el.getBoundingClientRect();
++      return {h: el.offsetHeight, full: r.top >= tbox.top - 1 && r.bottom <= tbox.bottom + 1, seen: r.top < tbox.bottom - 8};
++    });
++    const tops = [...document.querySelectorAll('.planner-week-overview > section')].map((el) => Math.round(el.getBoundingClientRect().top));
++    const yItem = [...document.querySelectorAll('.yesterday-list li')].find((li) => li.textContent.includes('合成昨天重点'));
++    const card = [...document.querySelectorAll('.planner-card')].find((el) => el.querySelector('h4').textContent === '合成昨天重点');
++    const todayItem = [...document.querySelectorAll('.daily-list li')].find((li) => li.textContent.includes('合成重点甲'));
++    const btn = card.querySelector('.detail-open');
++    return {
++      colH: col.offsetHeight,
++      gridH: grid.clientHeight,
++      cards, todays, tops,
++      yH: yItem.offsetHeight,
++      yText: yItem.innerText,
++      cardText: card.innerText,
++      todayText: todayItem.innerText,
++      btn: {type: btn.getAttribute('type'), text: btn.textContent}
++    };
++  });
++  assert.equal(desk.colH, 440);
++  assert.equal(desk.tops.length, 4);
++  assert(Math.max(...desk.tops) - Math.min(...desk.tops) < 2, '桌面四栏应并排');
++  assert(desk.cards.length >= 4);
++  assert(desk.cards.every((c) => c.h <= 210), '卡片过高 ' + JSON.stringify(desk.cards));
++  assert(desk.cards.every((c) => c.h < desk.gridH * 0.62), '单卡仍占满栏 ' + JSON.stringify(desk.cards));
++  assert(desk.cards.filter((c) => c.full).length >= 2, '同屏完整卡片不足 ' + JSON.stringify(desk.cards));
++  assert(desk.cards.filter((c) => c.seen).length >= 3, '同屏可见卡片不足 ' + JSON.stringify(desk.cards));
++  assert(desk.todays.filter((c) => c.seen).length >= 2, '今天栏同屏不足 ' + JSON.stringify(desk.todays));
++  assert(desk.yH <= 210);
++  assert.equal(desk.btn.type, 'button');
++  assert.equal(desk.btn.text, '查看详情');
++  assert(desk.cardText.includes('原计划：2026-11-02'));
++  assert(desk.cardText.includes('计划交付：2026-11-30'));
++  assert(desk.cardText.includes('含制作要求'));
++  assert(/历史 \d+ 条/.test(desk.cardText));
++  assert(!desk.cardText.includes('NOTE_NOT_YDAY'));
++  assert(!desk.cardText.includes('REQ_TAIL'));
++  assert(!desk.cardText.includes('YDAY_NEW_TAIL'));
++  assert(!desk.todayText.includes('PROGRESS_TAIL'));
++  assert(!desk.todayText.includes('NEXT_TAIL'));
++  assert(!desk.todayText.includes('REQ_TAIL'));
++  assert(!desk.todayText.includes('EVENT_NEW_TAIL'));
++  assert(desk.todayText.includes('当前进度'));
++  assert(desk.todayText.includes('查看详情'));
++  assert(desk.yText.includes('最新进展'));
++  assert(!desk.yText.includes('NOTE_NOT_YDAY'));
++  assert(!desk.yText.includes('YDAY_NEW_TAIL'));
++  assert(!desk.yText.includes('YDAY_OLD_TAIL'));
++  assert(!desk.yText.includes('YDAY_OLDER_TAIL'));
++  console.log('✓ 桌面默认态紧凑：栏高 440，多条同屏，长文和要求未铺开', desk.cards.map((c) => c.h).join(','));
++
++  await page.evaluate(() => {
++    document.querySelector('.planner-grid').scrollTop = 80;
++    window.scrollTo(0, 220);
++  });
++  const beforeScroll = await page.evaluate(() => ({g: document.querySelector('.planner-grid').scrollTop, y: window.scrollY}));
++  assert(beforeScroll.g >= 40 && beforeScroll.y >= 100, JSON.stringify(beforeScroll));
++  await page.evaluate(() => {
++    const li = [...document.querySelectorAll('.daily-list li')].find((el) => el.textContent.includes('合成重点甲'));
++    li.querySelector('.detail-open').click();
++  });
++  await page.waitForSelector('#detailDialog[open]');
++  let detail = await readDetail();
++  assert.equal(detail.workOpen, false);
++  assert.equal(detail.title, '合成重点甲');
++  assert.deepEqual(detail.headings, ['当天进展', '当前进度', '下一步', '具体制作要求', '进展记录']);
++  assert(detail.progress.body.includes('PROGRESS_TAIL') && detail.progress.body.startsWith(fill('进', 20)));
++  assert(detail.next.body.includes('NEXT_TAIL'));
++  assert(detail.req.body.includes('REQ_TAIL'));
++  assert(detail.req.body.includes('要求甲\n要求乙'));
++  assert(detail.req.body.includes('</script>'));
++  assert(detail.req.body.includes('<b>不是标签</b>'));
++  assert(!detail.req.html.includes('<b>'));
++  assert(!detail.req.html.includes('</script>'));
++  assert(detail.req.html.includes('&lt;/script&gt;'));
++  assert(!detail.progress.body.includes('REQ_TAIL'));
++  assert(!detail.req.body.includes('PROGRESS_TAIL'));
++  assert(!detail.next.body.includes('PROGRESS_TAIL'));
++  assert.deepEqual(detail.dayItems.map((it) => it.day), ['2026-11-18', '2026-11-18']);
++  assert(detail.dayItems[0].text.includes('EVENT_NEW_TAIL') && detail.dayItems[1].text.includes('EVENT_OLD_TAIL'));
++  assert(!detail.day.text.includes('EVENT_OLDER_TAIL'));
++  assert.deepEqual(detail.history.map((it) => it.day), ['2026-11-18', '2026-11-18', '2026-11-01']);
++  assert(detail.history[0].text.includes('EVENT_NEW_TAIL'));
++  assert(detail.history[2].text.includes('EVENT_OLDER_TAIL'));
++  assert(detail.dates.includes('计划日') && detail.dates.includes('2026-11-18'));
++  assert(detail.dates.includes('完成日') && detail.dates.includes('未完成'));
++  assert.equal(await page.$$eval('script', (els) => els.length), 2);
++  await closeDetail();
++  const afterScroll = await page.evaluate(() => ({g: document.querySelector('.planner-grid').scrollTop, y: window.scrollY}));
++  assert.equal(afterScroll.g, beforeScroll.g);
++  assert.equal(afterScroll.y, beforeScroll.y);
++  console.log('✓ 点击详情展示全文、独立要求和历史，关闭后滚动位置不变');
++
++  await page.focus('.planner-card .detail-open');
++  await page.keyboard.press('Enter');
++  await page.waitForSelector('#detailDialog[open]');
++  await page.keyboard.press('Escape');
++  await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
++  assert((await page.evaluate(() => document.activeElement.className)).includes('detail-open'));
++  await page.evaluate(() => document.querySelector('.planner-card .detail-open').click());
++  await page.waitForSelector('#detailDialog[open]');
++  const mask = await page.evaluate(() => {
++    const r = document.getElementById('detailDialog').getBoundingClientRect();
++    return {x: Math.max(4, r.left - 12), y: Math.max(4, r.top + 8)};
++  });
++  await page.mouse.click(mask.x, mask.y);
++  await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
++  console.log('✓ ESC 与点击遮罩可关闭，焦点回到原按钮');
++
++  await page.evaluate(() => [...document.querySelectorAll('.yesterday-list .detail-open')][0].click());
++  await page.waitForSelector('#detailDialog[open]');
++  detail = await readDetail();
++  assert.equal(detail.title, '合成昨天重点');
++  assert(detail.dayItems[0].text.includes('YDAY_NEW_TAIL') && detail.dayItems[1].text.includes('YDAY_OLD_TAIL'));
++  assert(!detail.day.text.includes('NOTE_NOT_YDAY'));
++  assert(!detail.day.text.includes('YDAY_OLDER_TAIL'));
++  assert(detail.progress.body.includes('NOTE_NOT_YDAY'));
++  assert.deepEqual(detail.history.map((it) => it.day), ['2026-11-17', '2026-11-17', '2026-11-10']);
++  assert(detail.history[2].text.includes('YDAY_OLDER_TAIL'));
++  assert(detail.dates.includes('原计划') && detail.dates.includes('2026-11-02'));
++  assert(detail.dates.includes('计划交付') && detail.dates.includes('2026-11-30'));
++  assert(!detail.req.body.includes('NOTE_NOT_YDAY'));
++  await closeDetail();
++  await page.evaluate(() => [...document.querySelectorAll('.week-item-btn')].find((b) => b.textContent.includes('合成昨天重点')).click());
++  await page.waitForSelector('#detailDialog[open]');
++  detail = await readDetail();
++  assert.equal(detail.title, '合成昨天重点');
++  assert(detail.progress.body.includes('NOTE_NOT_YDAY'));
++  assert(!detail.headings.includes('当天进展'));
++  assert(detail.headings.includes('具体制作要求') && detail.headings.includes('进展记录'));
++  await closeDetail();
++  console.log('✓ 昨天入口区分当天进展与当前进度；本周工作内容可打开同一详情');
++
++  await open('?today=2026-11-18&edit=1&view=home');
++  await page.evaluate(() => document.querySelector('.detail-open').click());
++  await page.waitForSelector('#detailDialog[open]');
++  assert.equal(await page.$eval('#workDialog', (el) => el.open), false);
++  await closeDetail();
++  await page.evaluate(() => document.querySelector('[data-edit="101"]').click());
++  await page.waitForSelector('#workForm textarea[name=requirements]');
++  assert.equal(await page.$eval('#detailDialog', (el) => el.open), false);
++  assert((await page.$eval('#workForm textarea[name=requirements]', (el) => el.value)).includes('REQ_TAIL'));
++  await page.click('#workDialog [data-act=close-dialog]');
++  await page.waitForFunction(() => !document.querySelector('#workDialog[open]'));
++  console.log('✓ 只读详情与维护模式编辑弹窗互不占用');
++
++  await page.setViewport({width: 390, height: 844});
++  await open('?today=2026-11-18&view=home');
++  const mobile = await page.evaluate(() => {
++    const overview = document.querySelector('.planner-week-overview');
++    const card = document.querySelector('.planner-card');
++    const tops = [...overview.children].map((el) => Math.round(el.getBoundingClientRect().top));
++    return {
++      overflow: overview.scrollWidth - overview.clientWidth,
++      cardW: card.getBoundingClientRect().width,
++      viewW: window.innerWidth,
++      stacked: Math.max(...tops) - Math.min(...tops) > 40,
++      btn: !!card.querySelector('.detail-open')
++    };
++  });
++  assert(mobile.stacked, '窄屏应改为上下排列');
++  assert(mobile.overflow <= 1);
++  assert(mobile.cardW <= mobile.viewW);
++  assert(mobile.btn);
++  await page.evaluate(() => document.querySelector('.detail-open').click());
++  await page.waitForSelector('#detailDialog[open]');
++  const dlgW = await page.$eval('#detailDialog', (el) => el.getBoundingClientRect().width);
++  assert(dlgW <= 390 - 8 && dlgW >= 280, '弹窗宽度 ' + dlgW);
++  const mobileBody = await page.evaluate(() => {
++    const body = document.querySelector('.detail-body');
++    const wide = [...body.querySelectorAll('*')].map((el) => ({tag: el.tagName, cls: el.className, sw: el.scrollWidth, cw: el.clientWidth})).filter((el) => el.sw > el.cw + 1).slice(0, 8);
++    return {sw: body.scrollWidth, cw: body.clientWidth, text: body.innerText.includes('NOTE_NOT_YDAY'), wide};
++  });
++  assert(mobileBody.text && mobileBody.sw <= mobileBody.cw + 1, JSON.stringify(mobileBody));
++  await closeDetail();
++  console.log('✓ 窄屏栏位上下排列，详情弹窗不撑破视口');
++
++  assert.equal(errors.length, 0, errors.join('\n'));
++  await browser.close();
++  fs.rmSync(dir, {recursive: true, force: true});
++  fs.rmSync(root, {recursive: true, force: true});
++  console.log('COMPACT_PASS');
++})().catch((err) => { console.error('FAIL', err); process.exit(1); });
