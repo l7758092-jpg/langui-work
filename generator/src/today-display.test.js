@@ -90,9 +90,19 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
     }, {}, sel, title);
   };
   const closeDetail = async () => {
-    await page.evaluate(() => document.querySelector('.is-expanded .planner-foot .detail-open').click());
+    await page.evaluate(() => {
+      const root = document.querySelector('.daily-list .is-expanded, .yesterday-list .is-expanded, .planner-card.is-expanded');
+      (root.querySelector('.inline-actions .detail-open') || root.querySelector('.inline-collapse-top')).click();
+    });
     await page.waitForFunction(() => !document.querySelector('.daily-list .is-expanded, .yesterday-list .is-expanded'));
   };
+  const timelineMetrics = (sel, title) => page.evaluate((s, t) => {
+    const li = [...document.querySelectorAll(s + ' > li')].find((el) => el.querySelector(':scope > .day-item-top strong') && el.querySelector(':scope > .day-item-top strong').textContent === t);
+    return [...li.querySelectorAll('.inline-timeline li')].map((row) => ({
+      content: getComputedStyle(row, '::before').content,
+      paddingLeft: getComputedStyle(row).paddingLeft
+    }));
+  }, sel, title);
   await open('?today=2026-11-18&view=home');
   const again = await item('.daily-list', '合成再修改');
   assert(again, '再修改任务应出现在今天');
@@ -105,6 +115,25 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   assert(!again.text.includes('今天做竖版'));
   assert.equal(again.historyOpen, false);
   await openItem('.daily-list', '合成再修改');
+  const againOpen = await page.evaluate(() => {
+    const li = [...document.querySelectorAll('.daily-list > li')].find((el) => el.querySelector(':scope > .day-item-top strong').textContent === '合成再修改');
+    const preview = li.querySelector(':scope > .planner-preview');
+    return {
+      rows: [...li.querySelectorAll('.inline-timeline li')].map((row) => ({ content: getComputedStyle(row, '::before').content, paddingLeft: getComputedStyle(row).paddingLeft })),
+      preview: getComputedStyle(preview).display,
+      dayKey: getComputedStyle(li.querySelector('.day-key')).display,
+      hints: [...li.querySelectorAll('.planner-hints')].map((el) => getComputedStyle(el).display),
+      foot: getComputedStyle(li.querySelector('.planner-foot')).display,
+      footBtn: getComputedStyle(li.querySelector('.planner-foot .detail-open')).display
+    };
+  });
+  assert(againOpen.rows.length > 0);
+  againOpen.rows.forEach((row) => { assert.equal(row.content, 'none'); assert.equal(row.paddingLeft, '8px'); });
+  assert.equal(againOpen.preview, 'none');
+  assert.equal(againOpen.dayKey, 'none');
+  assert(againOpen.hints.every((d) => d === 'none'));
+  assert.equal(againOpen.foot, 'none');
+  assert.equal(againOpen.footBtn, 'none');
   const againDetail = await readDetail();
   assert.equal(againDetail.dialogs, 0);
   assert(againDetail.progress.includes('当前竖版安排'));
@@ -113,6 +142,14 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   assert(againDetail.history.some((l) => l.includes('旧的改期说明')) && againDetail.history.some((l) => l.includes('更旧的安排')));
   assert(!againDetail.progress.includes('初稿') && !againDetail.day.includes('初稿'));
   await closeDetail();
+  const againClosed = await page.evaluate(() => {
+    const li = [...document.querySelectorAll('.daily-list > li')].find((el) => el.querySelector(':scope > .day-item-top strong').textContent === '合成再修改');
+    const preview = li.querySelector(':scope > .planner-preview');
+    return { expanded: li.classList.contains('is-expanded'), display: getComputedStyle(preview).display, rects: preview.getClientRects().length };
+  });
+  assert.equal(againClosed.expanded, false);
+  assert.notEqual(againClosed.display, 'none');
+  assert(againClosed.rects > 0);
   const progressOnly = await item('.daily-list', '合成当日进展');
   assert(progressOnly && progressOnly.badge === '当天进展' && progressOnly.text.includes('今天才发生的进展'));
   assert(!progressOnly.text.includes('不要当成今天的安排'));
@@ -152,12 +189,29 @@ if (built.status !== 0) { console.error(built.stdout.toString(), built.stderr.to
   assert(y && y.text.includes('昨天最新记录') && !y.text.includes('昨天旧记录'));
   assert(!y.text.includes('今天的说明不能算昨天'));
   await openItem('.yesterday-list', '合成昨天');
+  const yRows = await timelineMetrics('.yesterday-list', '合成昨天');
+  assert(yRows.length > 0);
+  yRows.forEach((row) => { assert.equal(row.content, 'none'); assert.equal(row.paddingLeft, '8px'); });
+  const yPreview = await page.evaluate(() => {
+    const li = [...document.querySelectorAll('.yesterday-list > li')].find((el) => el.querySelector(':scope > .day-item-top strong').textContent === '合成昨天');
+    return getComputedStyle(li.querySelector(':scope > .planner-preview')).display;
+  });
+  assert.equal(yPreview, 'none');
   const yDetail = await readDetail();
   assert(yDetail.day.includes('昨天最新记录') && yDetail.day.includes('昨天旧记录'));
   assert(!yDetail.day.includes('今天的说明不能算昨天'));
   assert(yDetail.progress.includes('今天的说明不能算昨天'));
   assert(yDetail.history.some((l) => l.includes('昨天旧记录')));
-  await closeDetail();
+  await page.evaluate(() => document.querySelector('.yesterday-list .is-expanded .inline-collapse-top').click());
+  await page.waitForFunction(() => !document.querySelector('.yesterday-list .is-expanded'));
+  const yClosed = await page.evaluate(() => {
+    const li = [...document.querySelectorAll('.yesterday-list > li')].find((el) => el.querySelector(':scope > .day-item-top strong').textContent === '合成昨天');
+    const preview = li.querySelector(':scope > .planner-preview');
+    return { expanded: li.classList.contains('is-expanded'), display: getComputedStyle(preview).display, rects: preview.getClientRects().length };
+  });
+  assert.equal(yClosed.expanded, false);
+  assert.notEqual(yClosed.display, 'none');
+  assert(yClosed.rects > 0);
   assert((await page.$eval('.planner-yesterday li strong', (el) => el.textContent)) === '合成昨天');
   const reqCard = await page.evaluate(() => {
     const card = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4')?.textContent === '合成再修改');

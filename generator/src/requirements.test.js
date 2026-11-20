@@ -99,7 +99,7 @@ const FILE = 'file://' + out;
     }, {}, title);
   };
   const closeDetail = async () => {
-    await page.evaluate(() => document.querySelector('.planner-card.is-expanded .planner-card-actions .detail-open').click());
+    await page.evaluate(() => document.querySelector('.planner-card.is-expanded .inline-actions .detail-open').click());
     await page.waitForFunction(() => !document.querySelector('.planner-card.is-expanded'));
   };
   await open('?today=2026-11-16&view=home');
@@ -113,6 +113,20 @@ const FILE = 'file://' + out;
   assert(!shown.text.includes('不是标签'));
   assert(!shown.text.includes('下一步保持'));
   await openCard('合成进度任务');
+  const shownHidden = await page.evaluate(() => {
+    const el = document.querySelector('.planner-card.is-expanded');
+    const preview = el.querySelector(':scope > .planner-preview');
+    return {
+      preview: getComputedStyle(preview).display,
+      dates: el.querySelector('.planner-dates') ? getComputedStyle(el.querySelector('.planner-dates')).display : 'none',
+      hints: [...el.querySelectorAll('.planner-hints')].map((node) => getComputedStyle(node).display),
+      footBtn: getComputedStyle(el.querySelector('.planner-foot .detail-open')).display
+    };
+  });
+  assert.equal(shownHidden.preview, 'none');
+  assert.equal(shownHidden.dates, 'none');
+  assert(shownHidden.hints.every((d) => d === 'none'));
+  assert.equal(shownHidden.footBtn, 'none');
   const shownDetail = await readDetail();
   assert.equal(shownDetail.dialogs, 0);
   assert.equal(shownDetail.req, REQ);
@@ -122,6 +136,16 @@ const FILE = 'file://' + out;
   assert.equal(shownDetail.progress, '仅进度说明');
   assert.equal(shownDetail.next, '下一步保持');
   assert(!shownDetail.progress.includes('第一行'));
+  await page.evaluate(() => document.querySelector('.planner-card.is-expanded .inline-collapse-top').click());
+  await page.waitForFunction(() => !document.querySelector('.planner-card.is-expanded'));
+  const shownBack = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === '合成进度任务');
+    const preview = el.querySelector(':scope > .planner-preview');
+    return { display: getComputedStyle(preview).display, rects: preview.getClientRects().length };
+  });
+  assert.notEqual(shownBack.display, 'none');
+  assert(shownBack.rects > 0);
+  await openCard('合成进度任务');
   await closeDetail();
   const plain = await card('合成无要求');
   assert(plain && plain.hasReqBlock === false && !plain.hints.includes('含制作要求') && plain.preview.includes('旧进度不应变成要求'));
