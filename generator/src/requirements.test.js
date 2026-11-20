@@ -65,14 +65,15 @@ const FILE = 'file://' + out;
       text: el.innerText,
       hints: [...el.querySelectorAll('.planner-hint')].map((x) => x.textContent),
       preview: el.querySelector('.planner-preview') ? el.querySelector('.planner-preview').textContent : '',
-      button: el.querySelector('.detail-open') ? el.querySelector('.detail-open').textContent : '',
-      hasReqBlock: !!el.querySelector('.planner-requirements, .detail-requirements')
+      button: el.querySelector('.planner-card-actions .detail-open') ? el.querySelector('.planner-card-actions .detail-open').textContent : '',
+      hasReqBlock: !!el.querySelector('.inline-detail:not([hidden]) .inline-req, .planner-requirements')
     };
   }, title);
   const readDetail = () => page.evaluate(() => {
-    const dlg = document.getElementById('detailDialog');
+    const root = document.querySelector('.planner-card.is-expanded');
+    const panel = root.querySelector('.inline-detail');
     const section = (name) => {
-      const h = [...dlg.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
+      const h = [...panel.querySelectorAll('h4')].find((x) => x.textContent.trim() === name);
       if (!h) return { text: '', html: '' };
       const p = h.parentElement.querySelector('p');
       return { text: p ? p.textContent : '', html: p ? p.innerHTML : '' };
@@ -81,26 +82,30 @@ const FILE = 'file://' + out;
     return {
       req: req.text,
       reqHtml: req.html,
-      hasTag: !!dlg.querySelector('.detail-requirements b'),
+      hasTag: !!panel.querySelector('.inline-req b'),
       progress: section('当前进度').text,
-      next: section('下一步').text
+      next: section('下一步').text,
+      dialogs: document.querySelectorAll('dialog[open]').length
     };
   });
   const openCard = async (title) => {
     await page.evaluate((t) => {
       const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
-      el.querySelector('.detail-open').click();
+      el.querySelector('.planner-card-actions .detail-open').click();
     }, title);
-    await page.waitForSelector('#detailDialog[open]');
+    await page.waitForFunction((t) => {
+      const el = [...document.querySelectorAll('.planner-card')].find((c) => c.querySelector('h4') && c.querySelector('h4').textContent === t);
+      return el.classList.contains('is-expanded') && document.querySelectorAll('dialog[open]').length === 0;
+    }, {}, title);
   };
   const closeDetail = async () => {
-    await page.click('#detailDialog [data-detail-close]');
-    await page.waitForFunction(() => !document.querySelector('#detailDialog[open]'));
+    await page.evaluate(() => document.querySelector('.planner-card.is-expanded .planner-card-actions .detail-open').click());
+    await page.waitForFunction(() => !document.querySelector('.planner-card.is-expanded'));
   };
   await open('?today=2026-11-16&view=home');
   const shown = await card('合成进度任务');
   assert(shown, '排期卡片缺失');
-  assert.equal(shown.button, '查看详情');
+  assert.equal(shown.button, '展开详情');
   assert(shown.hints.includes('含制作要求'));
   assert.equal(shown.hasReqBlock, false);
   assert(shown.preview.includes('仅进度说明'));
@@ -109,6 +114,7 @@ const FILE = 'file://' + out;
   assert(!shown.text.includes('下一步保持'));
   await openCard('合成进度任务');
   const shownDetail = await readDetail();
+  assert.equal(shownDetail.dialogs, 0);
   assert.equal(shownDetail.req, REQ);
   assert.equal(shownDetail.hasTag, false);
   assert(!shownDetail.reqHtml.includes('<b>'));
