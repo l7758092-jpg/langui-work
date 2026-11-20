@@ -267,6 +267,8 @@ function homeRequested(){ var p = params(); return !p.has('month') || p.get('vie
 /* ── 渲染 ── */
 var M;
 function render(){
+  var detailDlg = $('detailDialog');
+  if (detailDlg && detailDlg.open) detailDlg.close();
   M = model();
   var p = params();
   if (INITIAL_SELECTED === null){
@@ -324,6 +326,35 @@ function workTag(row){
   var hue = Array.from(name).reduce(function(h, c){ return (h * 31 + c.charCodeAt(0)) % 360; }, 0);
   return '<span class="work-tag" style="--tag-h:' + hue + '">' + esc(name) + '</span>';
 }
+function briefText(s, limit){
+  var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  limit = limit || 48;
+  return t.length > limit ? t.slice(0, limit) + '…' : t;
+}
+function hintTags(r){
+  var bits = [];
+  if (r.requirements && String(r.requirements).trim()) bits.push('<span class="planner-hint">含制作要求</span>');
+  if (r.history && r.history.length) bits.push('<span class="planner-hint">历史 ' + r.history.length + ' 条</span>');
+  return bits.length ? '<div class="planner-hints">' + bits.join('') + '</div>' : '';
+}
+function detailButton(id, mode, day){
+  return '<button type="button" class="work-link detail-open" data-detail="' + id + '" data-detail-mode="' + mode + '"' + (day ? ' data-detail-day="' + day + '"' : '') + ' aria-haspopup="dialog">查看详情</button>';
+}
+function previewHtml(preview){
+  if (!preview || !preview.text) return '';
+  return '<p class="planner-preview">' + (preview.label ? '<span>' + esc(preview.label) + '</span>' : '') + esc(preview.text) + '</p>';
+}
+function focusPreview(r, mode, day, ev){
+  var useEvent = mode === 'yesterday' || (mode === 'today' && !(r.planned === day && (r.progress || r.nextStep)));
+  if (useEvent){
+    if (ev && ev.length && ev[0].progress) return { label: '最新进展', text: briefText(ev[0].progress) };
+    return { label: '', text: '' };
+  }
+  if (r.progress && r.progress !== '已完成') return { label: '当前进度', text: briefText(r.progress) };
+  if (r.nextStep) return { label: '下一步', text: briefText(r.nextStep) };
+  return { label: '当前进度', text: r.done ? '已完成' : '未填写进度' };
+}
 function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" data-nav="link"' + (attrs || '') + '>' + text + '</a>'; }
 var WD = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
 var CN = ['一','二','三','四','五'];
@@ -346,20 +377,14 @@ function weekly(view, home){
   var dayEntry = function(r, day, mode){
     var ev = eventsOn(r, day), doneDay = completionDay(r), plannedToday = r.planned === day, completedToday = !!(r.done && doneDay === day);
     var follow = !!(r.done && plannedToday && doneDay && doneDay < day);
-    var parts = [], history = function(list){ return list.length ? '<details class="day-history"><summary>历史进展 ' + list.length + ' 条</summary>' + list.map(function(e){ return '<p>' + esc(e.progress || '') + '</p>'; }).join('') + '</details>' : ''; };
-    if (mode === 'today' && plannedToday && (r.progress || r.nextStep)){
-      if (r.progress) parts.push('<p class="day-line"><span>当前进度</span>' + esc(r.progress) + '</p>');
-      if (r.nextStep) parts.push('<p class="day-line"><span>下一步</span>' + esc(r.nextStep) + '</p>');
-      parts.push(history(ev));
-    } else if (ev.length){
-      parts.push('<p class="day-line"><span>最新进展</span>' + esc(ev[0].progress || '') + '</p>');
-      parts.push(history(ev.slice(1)));
-    }
-    if (follow) parts.push('<p class="day-line"><span>此前已完成</span>' + esc(doneDay) + '</p>');
     var badge = '';
-    if (mode === 'today') badge = completedToday ? '<span class="daily-kind">已完成</span>' : (plannedToday && !r.done ? '<span class="daily-kind">今日安排</span>' : (follow ? '<span class="daily-kind">本轮安排</span>' : '<span class="daily-kind">当天进展</span>'));
-    else if (completedToday) badge = '<span class="daily-kind">已完成</span>';
-    return { id: r.id, title: r.title, plannedToday: plannedToday, latest: ev.length ? ev[0].id : 0, html: badge + parts.join('') };
+    if (mode === 'today') badge = completedToday ? '已完成' : (plannedToday && !r.done ? '今日安排' : (follow ? '本轮安排' : '当天进展'));
+    else if (completedToday) badge = '已完成';
+    var html = '<div class="day-item-top"><strong>' + esc(r.title) + '</strong>' + (badge ? '<span class="daily-kind">' + badge + '</span>' : '') + '</div>' +
+      previewHtml(focusPreview(r, mode, day, ev)) +
+      (follow ? '<p class="day-key">此前已完成 ' + esc(doneDay) + '</p>' : '') +
+      '<div class="planner-foot">' + hintTags(r) + detailButton(r.id, mode, day) + '</div>';
+    return { id: r.id, title: r.title, plannedToday: plannedToday, latest: ev.length ? ev[0].id : 0, html: html };
   };
   var yesterdayItems = [];
   rows.forEach(function(r){
@@ -400,6 +425,10 @@ function weekly(view, home){
 
   var show = function(r){
     var displayDate = viewDate(r), isUpdate = updated.indexOf(r) >= 0, last = r.history[r.history.length - 1];
+    var dateBits = [];
+    if (isUpdate && r.planned) dateBits.push('<p class="planner-original">' + (r.date.indexOf('交付') >= 0 ? '计划交付：' : '当前计划：') + esc(r.planned) + '</p>');
+    if (r.deadline && r.deadline !== r.planned) dateBits.push('<p class="planner-original">计划交付：' + esc(r.deadline) + '</p>');
+    if (r.originalPlan && r.originalPlan !== r.planned) dateBits.push('<p class="planner-original">原计划：' + esc(r.originalPlan) + '</p>');
     return '<li class="planner-card"><div class="planner-card-top"><span class="' + (displayDate ? 'planner-date' : 'planner-date planner-date-empty') + '">' +
       (displayDate ? '<time datetime="' + displayDate + '">' + dateLabel(displayDate) + '</time><small>' + WD[new Date(displayDate + 'T00:00:00Z').getUTCDay()] + '</small>' : '日期未定') + '</span><div>' +
       workTag(r) + (isUpdate ? '<span class="planner-carry-label">本周进展</span>' : '') + (r.urgent && !r.done ? '<span class="planner-urgent">紧急</span>' : '') +
@@ -407,14 +436,13 @@ function weekly(view, home){
       (r.review ? '<span class="work-tag">' + esc(r.review) + '</span>' : '') + (laterRound(r) ? '<span class="planner-carry-label">此前已完成</span>' : (r.done ? '<span class="planner-done">已完成</span>' : '')) + '</div></div>' +
       '<h4>' + esc(r.title) + '</h4>' + (r.videoStage ? videoStageLine(r.videoStage) : '') +
       (r.project ? archiveLink('?project=' + encodeURIComponent(r.project) + '#archive', esc(r.project)) : '') +
-      (last && last.waiting ? '<p>等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p>下次跟进：' + esc(last.followUp) + '</p>' : '') +
-      (r.requirements ? '<div class="planner-requirements"><span>具体制作要求</span><p>' + esc(r.requirements) + '</p></div>' : '') +
-      '<div class="planner-progress"><span>当前进度</span><p>' + esc(r.progress || (r.done ? '已完成' : '未填写进度')) + '</p></div>' +
-      (r.nextStep ? '<div class="planner-next"><span>下一步</span><p>' + esc(r.nextStep) + '</p></div>' : '') +
-      (isUpdate && r.planned ? '<p class="planner-original">' + (r.date.indexOf('交付') >= 0 ? '计划交付：' : '当前计划：') + r.planned + '</p>' : '') +
-      (r.deadline && r.deadline !== r.planned ? '<p class="planner-original">计划交付：' + r.deadline + '</p>' : '') +
-      (r.originalPlan && r.originalPlan !== r.planned ? '<p class="planner-original">原计划：' + r.originalPlan + '</p>' : '') +
-      (EDIT ? '<button class="work-link" data-edit="' + r.id + '" data-week="' + week + '">详情／更新</button>' : '') + '</li>';
+      (last && last.waiting ? '<p class="planner-oneline"><span>等待</span>' + esc(briefText(last.waiting, 36)) + '</p>' : '') +
+      (last && last.followUp ? '<p class="planner-oneline"><span>下次跟进</span>' + esc(last.followUp) + '</p>' : '') +
+      previewHtml(focusPreview(r, 'schedule', '', [])) +
+      (dateBits.length ? '<div class="planner-dates">' + dateBits.join('') + '</div>' : '') +
+      '<div class="planner-foot">' + hintTags(r) +
+      '<div class="planner-card-actions">' + detailButton(r.id, 'schedule', '') +
+      (EDIT ? '<button type="button" class="work-link" data-edit="' + r.id + '" data-week="' + week + '">详情／更新</button>' : '') + '</div></div></li>';
   };
 
   if (view === 'week' && home){
@@ -431,14 +459,15 @@ function weekly(view, home){
       var items = weekItems.filter(function(r){ return laterRound(r) ? !g.done : r.done === g.done; });
       return '<section class="week-status-group ' + (g.done ? 'is-done' : 'is-open') + '" aria-label="' + g.label + '"><h4><span>' + (g.done ? '✓' : '●') + '</span>' + g.label + '<small>' + items.length + ' 项</small></h4>' +
         (items.length ? '<ul class="planner-week-list">' + items.map(function(r){ var d = viewDate(r) || completionDay(r); var doneDay = completionDay(r);
-          return '<li' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong>' + (d ? '<small>' + d.slice(5).replace('-', '月') + '日</small>' : '') + (r.done && doneDay && inWeek(doneDay) && !laterRound(r) ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
+          var checked = r.done && doneDay && inWeek(doneDay) && !laterRound(r);
+          return '<li><button type="button" class="week-item-btn" data-detail="' + r.id + '" data-detail-mode="week"' + (laterRound(r) ? ' title="此前已完成，当前日期是新安排"' : '') + '><strong>' + esc(r.title) + '</strong><small>' + (d ? d.slice(5).replace('-', '月') + '日' : '') + '</small><span class="week-row-end">' + (checked ? '<span class="week-done-check" aria-label="已完成">✓</span>' : '') + '<span class="week-detail-cue">详情</span></span></button></li>'; }).join('') + '</ul>' : '<p class="week-status-empty">暂无' + g.label + '工作</p>') + '</section>';
     }).join('') + '</div></section>';
     out += '<section class="planner-group planner-week-schedule"><h3>本周排期 <small>' + dated.length + ' 项</small></h3>' + (dated.length ? '<ul class="planner-grid">' + dated.map(show).join('') + '</ul>' : '<p class="planner-empty">暂无排期</p>') + '</section>';
     var liveYear = archiveMonth().slice(0,4) === today.slice(0,4);
     var todayBody = todayItems.length ? '<ul class="daily-list">' + todayItems.map(function(it){
-      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
+      return '<li>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">今天暂无工作安排</p>';
     var yesterdayBody = yesterdayItems.length ? '<ul class="yesterday-list">' + yesterdayItems.map(function(it){
-      return '<li><strong>' + esc(it.title) + '</strong>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
+      return '<li>' + it.html + '</li>'; }).join('') + '</ul>' : '<p class="planner-empty">' + (weekendShanghai(yesterday) ? '休息' : '昨天暂无工作记录') + '</p>';
     var todayMeta = today.slice(5).replace('-', '/') + ' · ' + todayItems.length + ' 项';
     var yesterdayMeta = yesterday.slice(5).replace('-', '/') + ' · ' + yesterdayItems.length + ' 项';
     if (!liveYear){
@@ -596,6 +625,64 @@ function deliveryOverview(){
   return o;
 }
 
+function historyNewest(list){
+  return (list || []).slice().sort(function(a, b){ return b.day.localeCompare(a.day) || b.id - a.id; });
+}
+function timelineHtml(list){
+  if (!list.length) return '<p class="detail-empty">暂无进展记录</p>';
+  return '<ol class="detail-timeline">' + list.map(function(e){
+    return '<li><time datetime="' + esc(e.day) + '">' + esc(e.day) + (e.done ? ' · 已完成' : '') + '</time><p>' + esc(e.progress || '') + '</p></li>';
+  }).join('') + '</ol>';
+}
+function rememberScroll(){
+  ui.scrollSnap = {
+    x: window.scrollX, y: window.scrollY,
+    nodes: Array.prototype.map.call(document.querySelectorAll('.planner-grid,.daily-list,.yesterday-list,.planner-week-list,.ledger-scroll'), function(el){ return { el: el, top: el.scrollTop }; })
+  };
+}
+function restoreScroll(){
+  var s = ui.scrollSnap; if (!s) return;
+  window.scrollTo(s.x, s.y);
+  s.nodes.forEach(function(n){ if (n.el && n.el.isConnected) n.el.scrollTop = n.top; });
+}
+function openDetail(id, mode, day){
+  var row = M.rows.filter(function(r){ return r.id === id; })[0];
+  var dlg = $('detailDialog');
+  if (!row || !dlg) return;
+  var doneDay = completionDay(row);
+  var badges = [];
+  if (row.urgent && !row.done) badges.push('<span class="planner-urgent">紧急</span>');
+  if (laterRound(row)) badges.push('<span class="planner-carry-label">此前已完成</span>');
+  else if (row.done) badges.push('<span class="planner-done">已完成</span>');
+  if (mode === 'today'){
+    var plannedToday = row.planned === day, completedToday = !!(row.done && doneDay === day);
+    var follow = !!(row.done && plannedToday && doneDay && doneDay < day);
+    var kind = completedToday ? '已完成' : (plannedToday && !row.done ? '今日安排' : (follow ? '本轮安排' : '当天进展'));
+    badges.push('<span class="daily-kind">' + kind + '</span>');
+  } else if (mode === 'yesterday' && row.done && doneDay === day) badges.push('<span class="daily-kind">已完成</span>');
+  if (row.review) badges.push('<span class="work-tag">' + esc(row.review) + '</span>');
+  var tag = workTag(row); if (tag) badges.push(tag);
+  var dateCell = function(label, value){ return '<div><dt>' + label + '</dt><dd>' + esc(value) + '</dd></div>'; };
+  var dates = dateCell('计划日', row.planned || '未定') + dateCell('计划交付', row.deadline || '未定') + dateCell('原计划', row.originalPlan || '未定') + dateCell('完成日', (row.done && doneDay) ? doneDay : '未完成');
+  var last = row.history[row.history.length - 1];
+  var extra = (last && last.waiting ? '<p class="detail-note">等待：' + esc(last.waiting) + '</p>' : '') + (last && last.followUp ? '<p class="detail-note">下次跟进：' + esc(last.followUp) + '</p>' : '');
+  var dayEvents = (day && (mode === 'today' || mode === 'yesterday')) ? historyNewest((row.history || []).filter(function(e){ return e.day === day; })) : [];
+  var dayBlock = (mode === 'today' || mode === 'yesterday') ? '<section class="detail-block detail-day"><h4>当天进展</h4>' + (dayEvents.length ? timelineHtml(dayEvents) : '<p class="detail-empty">当天没有单独的进展记录</p>') + '</section>' : '';
+  var progress = '<section class="detail-block detail-progress"><h4>当前进度</h4><p class="detail-text">' + esc(row.progress || (row.done ? '已完成' : '未填写进度')) + '</p></section>';
+  var next = row.nextStep ? '<section class="detail-block detail-next"><h4>下一步</h4><p class="detail-text">' + esc(row.nextStep) + '</p></section>' : '';
+  var req = row.requirements && String(row.requirements).trim() ? '<section class="detail-block detail-requirements"><h4>具体制作要求</h4><p class="detail-text">' + esc(row.requirements) + '</p></section>' : '';
+  var stages = row.videoStage ? '<section class="detail-block"><h4>视频制作进度</h4>' + videoStageLine(row.videoStage) + '</section>' : '';
+  var hist = '<section class="detail-block detail-history"><h4>进展记录</h4>' + timelineHtml(historyNewest(row.history)) + '</section>';
+  dlg.innerHTML = '<div class="detail-sheet"><div class="work-heading"><h2 id="detailTitle">工作详情</h2><button type="button" class="detail-close" data-detail-close>关闭</button></div><div class="detail-body"><h3 class="detail-task-title">' + esc(row.title) + '</h3>' +
+    (badges.length ? '<div class="detail-badges">' + badges.join('') + '</div>' : '') + '<dl class="detail-dates">' + dates + '</dl>' + extra + stages + dayBlock + progress + next + req + hist + '</div></div>';
+  if (dlg.open) dlg.close();
+  ui.detailOpener = document.activeElement;
+  rememberScroll();
+  dlg.showModal();
+  restoreScroll();
+  var closeBtn = dlg.querySelector('[data-detail-close]');
+  if (closeBtn) closeBtn.focus();
+}
 /* WorkEditor（旧站组件；旧站页面未挂载，只在 ?edit=1 维护模式出现） */
 var STAGE_OPTIONS = ['脚本已确认','收集素材中','剪辑中','字幕核对中','已导出待验收','已交付','已发布'];
 var CATEGORY_OPTIONS = ['公益视频','字幕与翻译','活动与汇报','行政与采购','报销','视频制作','行政','采购','汇报','团队规划'];
@@ -680,9 +767,20 @@ document.addEventListener('click', function(e){
   if (act === 'close-dialog'){ $('workDialog').close(); return; }
   if (act === 'export'){ exportBackup(); return; }
   if (act === 'import'){ $('importFile').click(); return; }
-  if (b.dataset.edit){ openEditor(Number(b.dataset.edit), b.dataset.week || null); return; }
+  if ('detailClose' in b.dataset){ $('detailDialog').close(); return; }
+  if (b.dataset.detail){ openDetail(Number(b.dataset.detail), b.dataset.detailMode || 'schedule', b.dataset.detailDay || ''); return; }
+  if (b.dataset.edit){ var detailOpen = $('detailDialog'); if (detailOpen && detailOpen.open) detailOpen.close(); openEditor(Number(b.dataset.edit), b.dataset.week || null); return; }
   if (b.dataset.new){ openEditor(null, b.dataset.week || null); return; }
 });
+var detailDialog = $('detailDialog');
+if (detailDialog){
+  detailDialog.addEventListener('close', function(){
+    restoreScroll();
+    var opener = ui.detailOpener; ui.detailOpener = null;
+    if (opener && opener.isConnected && opener.focus) opener.focus();
+  });
+  detailDialog.addEventListener('click', function(e){ if (e.target === detailDialog) detailDialog.close(); });
+}
 function copy(text){
   if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).catch(fallback);
   return fallback();
