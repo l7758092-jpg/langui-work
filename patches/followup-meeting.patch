@@ -1,0 +1,67 @@
+diff --git a/server.py b/server.py
+index 1b154b8..a913b45 100644
+--- a/server.py
++++ b/server.py
+@@ -64,7 +64,7 @@ async def update_note(task: str, note: Optional[str] = None, next_step: Optional
+ async def check_online() -> dict:
+     return await _r(store.check_online)
+ 
+-@mcp.tool(description='保存独立的每周工作汇报（写操作，走原有备份、生成、回归和发布，不改任务、不追加进展）。week 必须显式填写 YYYY-MM-DD，按 Asia/Shanghai 归到周一；同一周一再次保存只更新 projects 与 followups，并保留该周报对象上已有的其他元数据键；另起一周不会覆盖旧周。projects 是项目列表，followups 是「后续工作跟进」，可省略。每个项目单独填写 name、emoji、status（完成或进行等，禁止拼进 name）；track 默认 general，education 的制作块才可用脚本、片尾。blocks 按 type 分块，标签用 label，不可改名或合并：制作=文案、配音、素材、片头、字幕、横版、竖版（教育类另加脚本、片尾），横版与竖版必须各占一行；逐日进展=周一、周二、周三、剪辑、交片；会议=会议或周几上午/下午（如周二上午），每行 attendance 只能是已参加或待参加，text 必须写明 YYYY-MM-DD 或 M月D日，已参加和待参加各自成行；拍摄/交付跟进只放 followups，label=时间、到场、地点、人员、工作、拍摄、内容、素材截止、后续、交片。每行另有 emoji、可选 status、text。这些标签后的 status 和 text 只属于这一周。')
++@mcp.tool(description='保存独立的每周工作汇报（写操作，走原有备份、生成、回归和发布，不改任务、不追加进展）。week 必须显式填写 YYYY-MM-DD，按 Asia/Shanghai 归到周一；同一周一再次保存只更新 projects 与 followups，并保留该周报对象上已有的其他元数据键；另起一周不会覆盖旧周。projects 是项目列表，followups 是「后续工作跟进」，可省略。每个项目单独填写 name、emoji、status（完成或进行等，禁止拼进 name）；track 默认 general，education 的制作块才可用脚本、片尾。blocks 按 type 分块，标签用 label，不可改名或合并：制作=文案、配音、素材、片头、字幕、横版、竖版（教育类另加脚本、片尾），横版与竖版必须各占一行；逐日进展=周一、周二、周三、剪辑、交片；会议=会议或周几上午/下午（如周二上午），每行 attendance 只能是已参加或待参加，text 必须写明 YYYY-MM-DD 或 M月D日，已参加和待参加各自成行；followups 是后续工作跟进，可放拍摄/交付跟进（label=时间、到场、地点、人员、工作、拍摄、内容、素材截止、后续、交片），也可放待参加会议。已参加会议留在 projects，不能放进 followups。制作和逐日进展不能放进 followups。每行另有 emoji、可选 status、text。这些标签后的 status 和 text 只属于这一周。')
+ async def save_weekly_report(week: str, projects: list, followups: Optional[list] = None) -> dict:
+     return await _w(store.m_save_weekly_report, week, projects, followups)
+ 
+diff --git a/store.py b/store.py
+index 78a804c..1fd2ece 100644
+--- a/store.py
++++ b/store.py
+@@ -218,7 +218,7 @@ DAY_PROGRESS_LABELS = ('周一', '周二', '周三', '剪辑', '交片')
+ FOLLOW_LABELS = ('时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片')
+ MEETING_LABELS = ('会议',) + tuple(day + half for day in ('周一', '周二', '周三', '周四', '周五', '周六', '周日') for half in ('上午', '下午'))
+ PROJECT_BLOCK_TYPES = ('制作', '逐日进展', '会议')
+-FOLLOW_BLOCK_TYPES = ('拍摄/交付跟进',)
++FOLLOW_BLOCK_TYPES = ('拍摄/交付跟进', '会议')
+ ASPECT_RATIO = {'横版': '16:9', '竖版': '9:16'}
+ EXPLICIT_DATE = re.compile(r'\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日')
+ 
+@@ -264,7 +264,7 @@ def _required_status(value):
+     if not status: raise ValueError('项目状态不能为空，请单独填写完成或进行，不要写进项目名称')
+     return status
+ 
+-def _clean_line(line, allowed, block_type):
++def _clean_line(line, allowed, block_type, future=False):
+     if not isinstance(line, dict): raise ValueError('行须为结构化字段')
+     if 'label' in line and 'process' in line and str(line.get('label')).strip() != str(line.get('process')).strip():
+         raise ValueError('label 与 process 不一致')
+@@ -280,10 +280,12 @@ def _clean_line(line, allowed, block_type):
+         attendance = line.get('attendance')
+         if attendance not in ('已参加', '待参加'): raise ValueError('会议每行要单独标明 attendance：已参加或待参加')
+         if not EXPLICIT_DATE.search(item['text']): raise ValueError('会议内容须写明日期，例如 2026-11-17 或 11月17日')
++        if future and attendance != '待参加':
++            raise ValueError('后续工作跟进里的会议只能是待参加，已参加请放在项目正文')
+         item['attendance'] = attendance
+     return item
+ 
+-def _clean_blocks(blocks, name, allowed_types, track):
++def _clean_blocks(blocks, name, allowed_types, track, future=False):
+     if not isinstance(blocks, list) or not blocks: raise ValueError(f'「{name}」至少要有一个块')
+     if len(blocks) > 8: raise ValueError(f'「{name}」块过多')
+     out = []
+@@ -306,7 +308,7 @@ def _clean_blocks(blocks, name, allowed_types, track):
+         if len(lines_in) > limit: raise ValueError(f'「{name}」的{block_type}行数过多')
+         seen, lines = set(), []
+         for raw in lines_in:
+-            cleaned = _clean_line(raw, allowed, block_type)
++            cleaned = _clean_line(raw, allowed, block_type, future)
+             if block_type != '会议' and cleaned['label'] in seen:
+                 raise ValueError(f'「{name}」的{block_type}里{cleaned["label"]}重复。请保留为一行，不要和别的标签合并')
+             seen.add(cleaned['label']); lines.append(cleaned)
+@@ -327,7 +329,7 @@ def _clean_projects(items, section):
+         track = track.strip() or 'general'
+         if track not in ('general', 'education'): raise ValueError('项目类型只能是 general 或 education')
+         out.append({'name': name, 'emoji': _clean_emoji(item.get('emoji')), 'status': _required_status(item.get('status')),
+-                    'track': track, 'blocks': _clean_blocks(item.get('blocks'), name, allowed_types, track)})
++                    'track': track, 'blocks': _clean_blocks(item.get('blocks'), name, allowed_types, track, section == '后续工作跟进')})
+     return out
+ 
+ def _report_rows(data):

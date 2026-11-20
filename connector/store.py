@@ -218,7 +218,7 @@ DAY_PROGRESS_LABELS = ('周一', '周二', '周三', '剪辑', '交片')
 FOLLOW_LABELS = ('时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片')
 MEETING_LABELS = ('会议',) + tuple(day + half for day in ('周一', '周二', '周三', '周四', '周五', '周六', '周日') for half in ('上午', '下午'))
 PROJECT_BLOCK_TYPES = ('制作', '逐日进展', '会议')
-FOLLOW_BLOCK_TYPES = ('拍摄/交付跟进',)
+FOLLOW_BLOCK_TYPES = ('拍摄/交付跟进', '会议')
 ASPECT_RATIO = {'横版': '16:9', '竖版': '9:16'}
 EXPLICIT_DATE = re.compile(r'\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日')
 
@@ -264,7 +264,7 @@ def _required_status(value):
     if not status: raise ValueError('项目状态不能为空，请单独填写完成或进行，不要写进项目名称')
     return status
 
-def _clean_line(line, allowed, block_type):
+def _clean_line(line, allowed, block_type, future=False):
     if not isinstance(line, dict): raise ValueError('行须为结构化字段')
     if 'label' in line and 'process' in line and str(line.get('label')).strip() != str(line.get('process')).strip():
         raise ValueError('label 与 process 不一致')
@@ -280,10 +280,12 @@ def _clean_line(line, allowed, block_type):
         attendance = line.get('attendance')
         if attendance not in ('已参加', '待参加'): raise ValueError('会议每行要单独标明 attendance：已参加或待参加')
         if not EXPLICIT_DATE.search(item['text']): raise ValueError('会议内容须写明日期，例如 2026-11-17 或 11月17日')
+        if future and attendance != '待参加':
+            raise ValueError('后续工作跟进里的会议只能是待参加，已参加请放在项目正文')
         item['attendance'] = attendance
     return item
 
-def _clean_blocks(blocks, name, allowed_types, track):
+def _clean_blocks(blocks, name, allowed_types, track, future=False):
     if not isinstance(blocks, list) or not blocks: raise ValueError(f'「{name}」至少要有一个块')
     if len(blocks) > 8: raise ValueError(f'「{name}」块过多')
     out = []
@@ -306,7 +308,7 @@ def _clean_blocks(blocks, name, allowed_types, track):
         if len(lines_in) > limit: raise ValueError(f'「{name}」的{block_type}行数过多')
         seen, lines = set(), []
         for raw in lines_in:
-            cleaned = _clean_line(raw, allowed, block_type)
+            cleaned = _clean_line(raw, allowed, block_type, future)
             if block_type != '会议' and cleaned['label'] in seen:
                 raise ValueError(f'「{name}」的{block_type}里{cleaned["label"]}重复。请保留为一行，不要和别的标签合并')
             seen.add(cleaned['label']); lines.append(cleaned)
@@ -327,7 +329,7 @@ def _clean_projects(items, section):
         track = track.strip() or 'general'
         if track not in ('general', 'education'): raise ValueError('项目类型只能是 general 或 education')
         out.append({'name': name, 'emoji': _clean_emoji(item.get('emoji')), 'status': _required_status(item.get('status')),
-                    'track': track, 'blocks': _clean_blocks(item.get('blocks'), name, allowed_types, track)})
+                    'track': track, 'blocks': _clean_blocks(item.get('blocks'), name, allowed_types, track, section == '后续工作跟进')})
     return out
 
 def _report_rows(data):
