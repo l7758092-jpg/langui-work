@@ -378,20 +378,20 @@ function reportLine(line, blockType){
   var status = line.status ? '<span class="wreport-status">' + esc(line.status) + '</span>' : '';
   var ratio = aspect ? '<span class="wreport-aspect">' + aspect + '</span>' : '';
   var attendance = line.attendance ? ' data-attendance="' + esc(line.attendance) + '"' : '';
-  return '<div class="wreport-line" data-block="' + esc(blockType || '') + '" data-label="' + esc(label) + '"' + attendance + '><div class="wreport-line-head"><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(label) + '</strong>' + ratio + status + '</div><p class="wreport-text">' + esc(line.text) + '</p></div>';
+  return '<div class="wreport-line" data-block="' + esc(blockType || '') + '" data-label="' + esc(label) + '"' + attendance + '><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(label) + '</strong>' + status + ratio + '<span class="wreport-colon">：</span><span class="wreport-text">' + esc(line.text) + '</span></div>';
 }
 function reportBlocks(blocks){
   return (blocks || []).map(function(block){
     var type = String(block && block.type || '');
     var lines = block && block.lines || [];
-    var body = '';
     if (type === '会议'){
-      body = ['已参加', '待参加'].map(function(kind){
+      return ['已参加', '待参加'].map(function(kind){
         var group = lines.filter(function(line){ return line && line.attendance === kind; }).map(function(line){ return reportLine(line, type); }).join('');
         return group ? '<div class="wreport-attendance" data-attendance="' + kind + '"><h5>' + kind + '</h5><div class="wreport-lines">' + group + '</div></div>' : '';
       }).join('');
-    } else body = '<div class="wreport-lines">' + lines.map(function(line){ return reportLine(line, type); }).join('') + '</div>';
-    return body ? '<section class="wreport-block" data-type="' + esc(type) + '"><h4>' + esc(type) + '</h4>' + body + '</section>' : '';
+    }
+    var body = lines.map(function(line){ return reportLine(line, type); }).join('');
+    return body ? '<div class="wreport-lines" data-type="' + esc(type) + '">' + body + '</div>' : '';
   }).join('');
 }
 function reportProjects(list){
@@ -401,7 +401,7 @@ function reportProjects(list){
     var body = reportBlocks(blocks);
     if (!body) return '';
     var status = project.status ? '<span class="wreport-project-status">' + esc(project.status) + '</span>' : '';
-    return '<article class="wreport-project"><h3 class="wreport-project-title"><span class="wreport-emoji">' + esc(project.emoji || '') + '</span><span class="wreport-name">' + esc(project.name || '') + '</span>' + status + '</h3>' + body + '</article>';
+    return '<article class="wreport-project"><h3 class="wreport-project-title"><span class="wreport-name">' + esc(project.name || '') + '</span><span class="wreport-emoji">' + esc(project.emoji || '') + '</span>' + status + '</h3>' + body + '</article>';
   }).join('');
 }
 function workReportSection(){

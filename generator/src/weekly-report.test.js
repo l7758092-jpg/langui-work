@@ -151,12 +151,15 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
       status: el.querySelector('.wreport-status') ? el.querySelector('.wreport-status').textContent : '',
       text: el.querySelector('.wreport-text') ? el.querySelector('.wreport-text').textContent : '',
       html: el.querySelector('.wreport-text') ? el.querySelector('.wreport-text').innerHTML : '',
-      first: el.querySelector('.wreport-line-head') ? el.querySelector('.wreport-line-head').firstElementChild.className : ''
+      tag: el.querySelector('.wreport-text') ? el.querySelector('.wreport-text').tagName : '',
+      first: el.firstElementChild ? el.firstElementChild.className : '',
+      parts: [...el.children].map((node) => node.tagName === 'STRONG' ? 'strong' : node.className)
     }));
     const projects = (scope) => [...root.querySelectorAll(scope + ' .wreport-project')].map((article) => ({
       name: article.querySelector('.wreport-name') ? article.querySelector('.wreport-name').textContent : '',
       emoji: article.querySelector('.wreport-project-title .wreport-emoji') ? article.querySelector('.wreport-project-title .wreport-emoji').textContent : '',
-      status: article.querySelector('.wreport-project-status') ? article.querySelector('.wreport-project-status').textContent : ''
+      status: article.querySelector('.wreport-project-status') ? article.querySelector('.wreport-project-status').textContent : '',
+      order: [...article.querySelector('.wreport-project-title').children].map((node) => node.className)
     }));
     const follow = root.querySelector('.wreport-follow');
     const done = root.querySelector('.wreport-done');
@@ -205,9 +208,13 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.equal(view.doneProjects[0].name, '虚构星河纪录');
   assert.equal(view.doneProjects[0].emoji, '🎬');
   assert.equal(view.doneProjects[0].status, '进行中');
+  assert.deepEqual(view.doneProjects[0].order, ['wreport-name', 'wreport-emoji', 'wreport-project-status']);
   assert.equal(view.doneProjects[1].name, '虚构教室短片');
   assert.equal(view.doneProjects[1].status, '完成');
+  assert.deepEqual(view.doneProjects[1].order, ['wreport-name', 'wreport-emoji', 'wreport-project-status']);
   assert(!view.doneProjects[0].name.includes('进行中'));
+  const sectionHeads = await page.$$eval('.wreport h4, .wreport h5', (els) => els.map((el) => el.textContent.trim()));
+  assert.deepEqual(sectionHeads, ['已参加', '待参加']);
   const byLabel = (block, label) => view.done.find((item) => item.block === block && item.label === label);
   const copy = byLabel('制作', '文案');
   const land = byLabel('制作', '横版');
@@ -220,7 +227,15 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.equal(byLabel('会议', '会议').attendance, '待参加');
   assert(byLabel('会议', '会议').text.includes('2026-11-24'));
   assert(!byLabel('会议', '周二上午').text.includes('虚构待参加'));
-  view.done.forEach((item) => assert.equal(item.first, 'wreport-emoji'));
+  view.done.forEach((item) => {
+    assert.equal(item.first, 'wreport-emoji');
+    assert.equal(item.tag, 'SPAN');
+    assert.equal(item.parts[item.parts.length - 2], 'wreport-colon');
+    assert.equal(item.parts[item.parts.length - 1], 'wreport-text');
+  });
+  assert.deepEqual(copy.parts, ['wreport-emoji', 'strong', 'wreport-status', 'wreport-colon', 'wreport-text']);
+  assert.deepEqual(land.parts, ['wreport-emoji', 'strong', 'wreport-status', 'wreport-aspect', 'wreport-colon', 'wreport-text']);
+  assert.equal(await page.$eval('.wreport-line .wreport-text', (el) => getComputedStyle(el).display), 'inline');
   assert(copy.text.includes('虚构甲周文案句子') && copy.text.includes('\n') && copy.text.includes('第二行'));
   assert.equal(copy.status, '已定稿&<i>');
   assert.equal(copy.aspect, '');
