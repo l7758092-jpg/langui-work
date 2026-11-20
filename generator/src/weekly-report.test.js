@@ -32,26 +32,70 @@ const tasks = [
   ]}),
   task({id: 20250001, title: '虚构旧档', month: '2025-12', dateText: '12月1日', done: true, completed: '2025-12-01', note: '旧进度', plan: '2025-12-01', week: '2025-12-01', recordDay: '2025-12-01', sortDay: '2025-12-01', events: []})
 ];
+const line = (emoji, label, text, extra) => Object.assign({emoji, label, text}, extra || {});
 const reports = [
   {
     week: '2026-11-16', timezone: 'Asia/Shanghai', updatedAt: '2026-11-18T09:00:00+08:00',
-    projects: [{name: '虚构星河纪录', track: 'general', lines: [
-      {emoji: '✅', process: '文案', status: '已定稿&<i>', text: THIS_COPY, aspect: '9:16'},
-      {emoji: '🎬', process: '横版', status: '粗剪', text: THIS_LAND, aspect: '9:16'},
-      {emoji: '📱', process: '竖版', status: '进行中', text: THIS_PORT, aspect: '16:9'},
-      {emoji: '🎧', process: '配音', status: '已录', text: '虚构甲周旁白句子'}
-    ]}],
-    followups: [{name: '虚构星河纪录', track: 'general', lines: [
-      {emoji: '📌', process: '配音', status: '待补', text: FOLLOW}
-    ]}]
+    projects: [
+      {
+        name: '虚构星河纪录', emoji: '🎬', status: '进行中', track: 'general',
+        blocks: [
+          {type: '制作', lines: [
+            line('✅', '文案', THIS_COPY, {status: '已定稿&<i>', aspect: '9:16'}),
+            line('🎧', '配音', '虚构甲周配音句子', {status: '已录'}),
+            line('🗂️', '素材', '虚构甲周素材句子'),
+            line('🎞️', '片头', '虚构甲周片头句子'),
+            line('💬', '字幕', '虚构甲周字幕句子'),
+            line('🎬', '横版', THIS_LAND, {status: '粗剪', aspect: '9:16'}),
+            line('📱', '竖版', THIS_PORT, {status: '进行中', aspect: '16:9'})
+          ]},
+          {type: '逐日进展', lines: [
+            line('📅', '周一', '虚构周一进展句子'),
+            line('📅', '周二', '虚构周二进展句子'),
+            line('📅', '周三', '虚构周三进展句子'),
+            line('✂️', '剪辑', '虚构逐日剪辑句子'),
+            line('📦', '交片', '虚构逐日交片句子')
+          ]},
+          {type: '会议', lines: [
+            line('✅', '周二上午', '2026-11-17 虚构已参加会议句子', {attendance: '已参加'}),
+            line('📌', '会议', '2026-11-24 虚构待参加会议句子', {attendance: '待参加', status: '待定'})
+          ]}
+        ]
+      },
+      {
+        name: '虚构教室短片', emoji: '✅', status: '完成', track: 'education',
+        blocks: [{type: '制作', lines: [
+          line('📝', '脚本', '虚构教室脚本句子', {status: '讨论中'}),
+          line('🏁', '片尾', '虚构教室片尾句子')
+        ]}]
+      }
+    ],
+    followups: [{
+      name: '虚构外拍安排', emoji: '📌', status: '待办',
+      blocks: [{type: '拍摄/交付跟进', lines: [
+        line('🕐', '时间', '2026-11-25 09:00'),
+        line('🚶', '到场', '虚构到场句子'),
+        line('📍', '地点', '虚构地点句子'),
+        line('👤', '人员', '虚构人员句子'),
+        line('🔧', '工作', '虚构跟进工作句子'),
+        line('🎥', '拍摄', '虚构拍摄句子'),
+        line('📄', '内容', '虚构跟进内容句子'),
+        line('⏳', '素材截止', '2026-11-27'),
+        line('📌', '后续', FOLLOW),
+        line('📦', '交片', '虚构跟进交片句子')
+      ]}]
+    }]
   },
   {
     week: '2025-12-29', timezone: 'Asia/Shanghai', updatedAt: '2026-01-02T09:00:00+08:00',
-    projects: [{name: '虚构教室短片', track: 'education', lines: [
-      {emoji: '📝', process: '脚本', status: '讨论中', text: CROSS_COPY},
-      {emoji: '🎬', process: '横版', status: '未开始', text: CROSS_LAND},
-      {emoji: '🏁', process: '片尾', status: '待做', text: '虚构跨年片尾句子'}
-    ]}],
+    projects: [{
+      name: '虚构跨年短片', emoji: '🎬', status: '进行中', track: 'education',
+      blocks: [{type: '制作', lines: [
+        line('📝', '脚本', CROSS_COPY, {status: '讨论中'}),
+        line('🎬', '横版', CROSS_LAND, {status: '未开始'}),
+        line('🏁', '片尾', '虚构跨年片尾句子', {status: '待做'})
+      ]}]
+    }],
     followups: []
   }
 ];
@@ -98,7 +142,9 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
     const root = document.querySelector('.wreport');
     if (!root) return null;
     const lines = (scope) => [...root.querySelectorAll(scope + ' .wreport-line')].map((el) => ({
-      process: el.getAttribute('data-process'),
+      label: el.getAttribute('data-label'),
+      block: el.getAttribute('data-block'),
+      attendance: el.getAttribute('data-attendance') || '',
       emoji: el.querySelector('.wreport-emoji') ? el.querySelector('.wreport-emoji').textContent : '',
       name: el.querySelector('strong') ? el.querySelector('strong').textContent : '',
       aspect: el.querySelector('.wreport-aspect') ? el.querySelector('.wreport-aspect').textContent : '',
@@ -106,6 +152,11 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
       text: el.querySelector('.wreport-text') ? el.querySelector('.wreport-text').textContent : '',
       html: el.querySelector('.wreport-text') ? el.querySelector('.wreport-text').innerHTML : '',
       first: el.querySelector('.wreport-line-head') ? el.querySelector('.wreport-line-head').firstElementChild.className : ''
+    }));
+    const projects = (scope) => [...root.querySelectorAll(scope + ' .wreport-project')].map((article) => ({
+      name: article.querySelector('.wreport-name') ? article.querySelector('.wreport-name').textContent : '',
+      emoji: article.querySelector('.wreport-project-title .wreport-emoji') ? article.querySelector('.wreport-project-title .wreport-emoji').textContent : '',
+      status: article.querySelector('.wreport-project-status') ? article.querySelector('.wreport-project-status').textContent : ''
     }));
     const follow = root.querySelector('.wreport-follow');
     const done = root.querySelector('.wreport-done');
@@ -119,16 +170,25 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
       times: [...root.querySelectorAll('time')].map((el) => el.getAttribute('datetime')),
       done: lines('.wreport-done'),
       later: lines('.wreport-later'),
+      doneProjects: projects('.wreport-done'),
+      laterProjects: projects('.wreport-later'),
       follow: follow ? follow.textContent : '',
       followAfter: !!(done && follow && (done.compareDocumentPosition(follow) & Node.DOCUMENT_POSITION_FOLLOWING)),
       buttons: [...document.querySelectorAll('.workspace-switch button')].map((el) => el.textContent)
     };
   });
 
-  await open(pageBuild.out, '?today=2026-11-18&week=2025-12-29');
+  await open(pageBuild.out, '?today=2026-11-18&week=2026-01-03');
   const labels = await page.$$eval('.workspace-switch button', (els) => els.map((el) => el.textContent));
   assert.equal(labels.filter((label) => label === '本周工作汇报').length, 1);
   assert(labels.includes('本周做了什么') && labels.includes('整体汇报') && labels.includes('本周工作'));
+  await page.click('.workspace-switch button[data-view="weekly-work-report"]');
+  await page.waitForFunction(() => location.hash === '#weekly-work-report' && location.search.includes('week=2025-12-29') && !location.search.includes('week=2026-11-16'));
+  let kept = await reportOf();
+  assert.equal(kept.week, '2025-12-29');
+  assert(kept.text.includes(CROSS_COPY));
+  assert(!kept.text.includes('虚构甲周文案句子'));
+  await open(pageBuild.out, '?today=2026-11-18');
   await page.click('.workspace-switch button[data-view="weekly-work-report"]');
   await page.waitForFunction(() => location.hash === '#weekly-work-report' && location.search.includes('week=2026-11-16'));
   let view = await reportOf();
@@ -142,19 +202,29 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.equal(view.tags, 0);
   assert.equal(view.follow, '后续工作跟进');
   assert.equal(view.followAfter, true);
-  assert.deepEqual(view.done.map((line) => line.process), ['文案', '横版', '竖版', '配音']);
-  view.done.forEach((line) => {
-    assert.equal(line.name, line.process);
-    assert.equal(line.first, 'wreport-emoji');
-  });
-  assert(view.done[0].text.includes('虚构甲周文案句子') && view.done[0].text.includes('\n') && view.done[0].text.includes('第二行'));
-  const copy = view.done[0];
-  const land = view.done[1];
-  const port = view.done[2];
-  assert.equal(copy.emoji, '✅');
+  assert.equal(view.doneProjects[0].name, '虚构星河纪录');
+  assert.equal(view.doneProjects[0].emoji, '🎬');
+  assert.equal(view.doneProjects[0].status, '进行中');
+  assert.equal(view.doneProjects[1].name, '虚构教室短片');
+  assert.equal(view.doneProjects[1].status, '完成');
+  assert(!view.doneProjects[0].name.includes('进行中'));
+  const byLabel = (block, label) => view.done.find((item) => item.block === block && item.label === label);
+  const copy = byLabel('制作', '文案');
+  const land = byLabel('制作', '横版');
+  const port = byLabel('制作', '竖版');
+  ['文案', '配音', '素材', '片头', '字幕', '横版', '竖版'].forEach((label) => assert.equal(byLabel('制作', label).name, label));
+  ['周一', '周二', '周三', '剪辑', '交片'].forEach((label) => assert.equal(byLabel('逐日进展', label).name, label));
+  assert.equal(byLabel('逐日进展', '交片').text, '虚构逐日交片句子');
+  assert.equal(byLabel('会议', '周二上午').attendance, '已参加');
+  assert(byLabel('会议', '周二上午').text.includes('2026-11-17'));
+  assert.equal(byLabel('会议', '会议').attendance, '待参加');
+  assert(byLabel('会议', '会议').text.includes('2026-11-24'));
+  assert(!byLabel('会议', '周二上午').text.includes('虚构待参加'));
+  view.done.forEach((item) => assert.equal(item.first, 'wreport-emoji'));
+  assert(copy.text.includes('虚构甲周文案句子') && copy.text.includes('\n') && copy.text.includes('第二行'));
   assert.equal(copy.status, '已定稿&<i>');
   assert.equal(copy.aspect, '');
-  assert(copy.text.includes('虚构甲周文案句子') && copy.text.includes('<b>不是标签</b>') && copy.text.includes('</script>'));
+  assert(copy.text.includes('<b>不是标签</b>') && copy.text.includes('</script>'));
   assert(copy.html.includes('&lt;b&gt;') && !copy.html.includes('<b>') && !copy.html.includes('<img'));
   assert.equal(land.aspect, '16:9');
   assert.equal(land.status, '粗剪');
@@ -163,17 +233,20 @@ console.log('✓ 构建保留两个脚本，并带上独立周报入口');
   assert.equal(port.aspect, '9:16');
   assert.equal(port.text, THIS_PORT);
   assert(!port.text.includes('16:9'));
-  assert.equal(view.later.length, 1);
-  assert.equal(view.later[0].text, FOLLOW);
+  assert.deepEqual(view.later.map((item) => item.label), ['时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片']);
+  assert.equal(view.laterProjects[0].status, '待办');
+  assert.equal(view.later.find((item) => item.label === '后续').text, FOLLOW);
+  assert.equal(view.later.find((item) => item.label === '交片').text, '虚构跟进交片句子');
   assert(!view.text.slice(0, view.text.indexOf('后续工作跟进')).includes(FOLLOW));
-  console.log('✓ 本周入口归一到周一，工序分行，横竖版独立，标记被转义');
+  console.log('✓ 无周参数才回到本周；历史周按钮留在原周；块、项目状态和横竖版都分开');
 
   await page.evaluate(() => [...document.querySelectorAll('.wreport-nav a')].find((el) => el.textContent.trim() === '2025-12-29').click());
   await page.waitForFunction(() => document.querySelector('.wreport') && document.querySelector('.wreport').getAttribute('data-week') === '2025-12-29');
   view = await reportOf();
   assert.equal(view.state, 'ready');
   assert.deepEqual(view.times, ['2025-12-29', '2026-01-04']);
-  assert.deepEqual(view.done.map((line) => line.process), ['脚本', '横版', '片尾']);
+  assert.deepEqual(view.done.map((item) => item.label), ['脚本', '横版', '片尾']);
+  assert.equal(view.doneProjects[0].status, '进行中');
   assert.equal(view.done[0].status, '讨论中');
   assert.equal(view.done[0].text, CROSS_COPY);
   assert.equal(view.done[1].aspect, '16:9');

@@ -211,10 +211,16 @@ def m_update_note(data, task, note=None, next_step=None, deadline=None, date_tex
     if not ch: raise ValueError('没有要改的内容')
     return t, f"已更新「{t['title']}」的" + '、'.join(ch)
 
-# ── 独立周报：标签固定，正文和状态按周存放，不写入任务 ──
+# ── 独立周报：块类型和标签固定，状态与正文按周存放，不写入任务 ──
 GENERAL_PROCESSES = ('文案', '配音', '素材', '片头', '字幕', '横版', '竖版')
 EDUCATION_PROCESSES = GENERAL_PROCESSES + ('脚本', '片尾')
+DAY_PROGRESS_LABELS = ('周一', '周二', '周三', '剪辑', '交片')
+FOLLOW_LABELS = ('时间', '到场', '地点', '人员', '工作', '拍摄', '内容', '素材截止', '后续', '交片')
+MEETING_LABELS = ('会议',) + tuple(day + half for day in ('周一', '周二', '周三', '周四', '周五', '周六', '周日') for half in ('上午', '下午'))
+PROJECT_BLOCK_TYPES = ('制作', '逐日进展', '会议')
+FOLLOW_BLOCK_TYPES = ('拍摄/交付跟进',)
 ASPECT_RATIO = {'横版': '16:9', '竖版': '9:16'}
+EXPLICIT_DATE = re.compile(r'\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日')
 
 def now_iso():
     return datetime.datetime.now(TZ).replace(microsecond=0).isoformat()
@@ -253,38 +259,75 @@ def _clean_status(value):
     if value is None or value == '': return None
     return _clean_plain(value, '状态', 24)
 
-def _clean_line(line, allowed):
-    if not isinstance(line, dict): raise ValueError('工序须为结构化字段')
-    process = line.get('process')
-    if not isinstance(process, str) or process.strip() not in allowed:
-        raise ValueError('工序标签只能是：' + '、'.join(allowed))
-    process = process.strip()
-    item = {'emoji': _clean_emoji(line.get('emoji')), 'process': process, 'text': _clean_plain(line.get('text'), '工序内容', 2000, allow_break=True)}
+def _required_status(value):
+    status = _clean_status(value)
+    if not status: raise ValueError('项目状态不能为空，请单独填写完成或进行，不要写进项目名称')
+    return status
+
+def _clean_line(line, allowed, block_type):
+    if not isinstance(line, dict): raise ValueError('行须为结构化字段')
+    if 'label' in line and 'process' in line and str(line.get('label')).strip() != str(line.get('process')).strip():
+        raise ValueError('label 与 process 不一致')
+    raw = line.get('label', line.get('process'))
+    if not isinstance(raw, str) or raw.strip() not in allowed:
+        raise ValueError(block_type + '的标签只能是：' + '、'.join(allowed))
+    label = raw.strip()
+    item = {'emoji': _clean_emoji(line.get('emoji')), 'label': label, 'text': _clean_plain(line.get('text'), '行内容', 2000, allow_break=True)}
     status = _clean_status(line.get('status'))
     if status: item['status'] = status
-    if process in ASPECT_RATIO: item['aspect'] = ASPECT_RATIO[process]
+    if label in ASPECT_RATIO: item['aspect'] = ASPECT_RATIO[label]
+    if block_type == '会议':
+        attendance = line.get('attendance')
+        if attendance not in ('已参加', '待参加'): raise ValueError('会议每行要单独标明 attendance：已参加或待参加')
+        if not EXPLICIT_DATE.search(item['text']): raise ValueError('会议内容须写明日期，例如 2026-11-17 或 11月17日')
+        item['attendance'] = attendance
     return item
 
-def _clean_projects(items, label):
-    if len(items) > 40: raise ValueError(f'{label}项目过多')
+def _clean_blocks(blocks, name, allowed_types, track):
+    if not isinstance(blocks, list) or not blocks: raise ValueError(f'「{name}」至少要有一个块')
+    if len(blocks) > 8: raise ValueError(f'「{name}」块过多')
+    out = []
+    for block in blocks:
+        if not isinstance(block, dict): raise ValueError('块须为结构化字段')
+        block_type = block.get('type')
+        if block_type not in allowed_types:
+            raise ValueError(f'「{name}」的块类型只能是：' + '、'.join(allowed_types))
+        if block_type == '制作':
+            allowed = EDUCATION_PROCESSES if track == 'education' else GENERAL_PROCESSES
+        elif block_type == '逐日进展':
+            allowed = DAY_PROGRESS_LABELS
+        elif block_type == '会议':
+            allowed = MEETING_LABELS
+        else:
+            allowed = FOLLOW_LABELS
+        lines_in = block.get('lines')
+        if not isinstance(lines_in, list) or not lines_in: raise ValueError(f'「{name}」的{block_type}至少要有一行')
+        limit = 40 if block_type == '会议' else len(allowed)
+        if len(lines_in) > limit: raise ValueError(f'「{name}」的{block_type}行数过多')
+        seen, lines = set(), []
+        for raw in lines_in:
+            cleaned = _clean_line(raw, allowed, block_type)
+            if block_type != '会议' and cleaned['label'] in seen:
+                raise ValueError(f'「{name}」的{block_type}里{cleaned["label"]}重复。请保留为一行，不要和别的标签合并')
+            seen.add(cleaned['label']); lines.append(cleaned)
+        out.append({'type': block_type, 'lines': lines})
+    return out
+
+def _clean_projects(items, section):
+    if len(items) > 40: raise ValueError(f'{section}项目过多')
+    allowed_types = FOLLOW_BLOCK_TYPES if section == '后续工作跟进' else PROJECT_BLOCK_TYPES
     out = []
     for item in items:
         if not isinstance(item, dict): raise ValueError('项目须为结构化字段')
+        if 'lines' in item and 'blocks' not in item:
+            raise ValueError('项目须按块填写 blocks。制作、逐日进展、会议和拍摄/交付跟进要分开，不要改称文案或素材')
         name = _clean_plain(item.get('name'), '项目名称', 80)
         track = item.get('track') or 'general'
         if not isinstance(track, str): raise ValueError('项目类型须为文字')
         track = track.strip() or 'general'
         if track not in ('general', 'education'): raise ValueError('项目类型只能是 general 或 education')
-        allowed = EDUCATION_PROCESSES if track == 'education' else GENERAL_PROCESSES
-        lines_in = item.get('lines')
-        if not isinstance(lines_in, list) or not lines_in: raise ValueError(f'「{name}」至少要有一道工序')
-        if len(lines_in) > len(allowed): raise ValueError(f'「{name}」工序过多')
-        seen, lines = set(), []
-        for line in lines_in:
-            cleaned = _clean_line(line, allowed)
-            if cleaned['process'] in seen: raise ValueError(f'「{name}」的{cleaned["process"]}重复，横版和竖版以及其他工序都要各自单独一项')
-            seen.add(cleaned['process']); lines.append(cleaned)
-        out.append({'name': name, 'track': track, 'lines': lines})
+        out.append({'name': name, 'emoji': _clean_emoji(item.get('emoji')), 'status': _required_status(item.get('status')),
+                    'track': track, 'blocks': _clean_blocks(item.get('blocks'), name, allowed_types, track)})
     return out
 
 def _report_rows(data):
@@ -313,7 +356,9 @@ def m_save_weekly_report(data, week, projects, followups=None):
     matches = [i for i, row in enumerate(rows) if isinstance(row, dict) and row.get('week') == week]
     if len(matches) == 1 and _same_body(rows[matches[0]], projects, followups):
         return {'kind': 'weekly-report', 'report': _present_report(rows[matches[0]])}, f'{label(week)} ~ {label(end)} 的工作汇报内容相同，未重复创建'
-    stored = {'week': week, 'timezone': 'Asia/Shanghai', 'updatedAt': now_iso(), 'projects': projects, 'followups': followups}
+    owned = ('week', 'timezone', 'updatedAt', 'projects', 'followups')
+    stored = {key: value for key, value in (rows[matches[0]].items() if matches else []) if key not in owned}
+    stored.update({'week': week, 'timezone': 'Asia/Shanghai', 'updatedAt': now_iso(), 'projects': projects, 'followups': followups})
     if matches:
         rows[matches[0]] = stored
         for i in reversed(matches[1:]): del rows[i]

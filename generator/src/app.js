@@ -360,7 +360,7 @@ function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" dat
 var WD = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
 var CN = ['一','二','三','四','五'];
 
-/* 独立周报。工序标签固定；emoji、状态和正文来自 weeklyReports，不在这里写死某一周的句子。 */
+/* 独立周报。块和标签固定；项目状态、行状态和正文来自 weeklyReports，不在这里写死某一周的句子。 */
 function weeklyReportRows(){
   var raw = BASE && BASE.weeklyReports;
   return Array.isArray(raw) ? raw : [];
@@ -370,19 +370,38 @@ function reportHref(day){
   p.set('week', monday(day));
   return '?' + p.toString() + '#weekly-work-report';
 }
-function reportLine(line){
-  if (!line || line.process == null || line.text == null || !String(line.text).trim()) return '';
-  var process = String(line.process);
-  var aspect = process === '横版' ? '16:9' : process === '竖版' ? '9:16' : '';
+function reportLine(line, blockType){
+  var label = line && (line.label != null ? line.label : line.process);
+  if (!line || label == null || line.text == null || !String(line.text).trim()) return '';
+  label = String(label);
+  var aspect = label === '横版' ? '16:9' : label === '竖版' ? '9:16' : '';
   var status = line.status ? '<span class="wreport-status">' + esc(line.status) + '</span>' : '';
   var ratio = aspect ? '<span class="wreport-aspect">' + aspect + '</span>' : '';
-  return '<div class="wreport-line" data-process="' + esc(process) + '"><div class="wreport-line-head"><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(process) + '</strong>' + ratio + status + '</div><p class="wreport-text">' + esc(line.text) + '</p></div>';
+  var attendance = line.attendance ? ' data-attendance="' + esc(line.attendance) + '"' : '';
+  return '<div class="wreport-line" data-block="' + esc(blockType || '') + '" data-label="' + esc(label) + '"' + attendance + '><div class="wreport-line-head"><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(label) + '</strong>' + ratio + status + '</div><p class="wreport-text">' + esc(line.text) + '</p></div>';
+}
+function reportBlocks(blocks){
+  return (blocks || []).map(function(block){
+    var type = String(block && block.type || '');
+    var lines = block && block.lines || [];
+    var body = '';
+    if (type === '会议'){
+      body = ['已参加', '待参加'].map(function(kind){
+        var group = lines.filter(function(line){ return line && line.attendance === kind; }).map(function(line){ return reportLine(line, type); }).join('');
+        return group ? '<div class="wreport-attendance" data-attendance="' + kind + '"><h5>' + kind + '</h5><div class="wreport-lines">' + group + '</div></div>' : '';
+      }).join('');
+    } else body = '<div class="wreport-lines">' + lines.map(function(line){ return reportLine(line, type); }).join('') + '</div>';
+    return body ? '<section class="wreport-block" data-type="' + esc(type) + '"><h4>' + esc(type) + '</h4>' + body + '</section>' : '';
+  }).join('');
 }
 function reportProjects(list){
   return (list || []).map(function(project){
-    var lines = (project.lines || []).map(reportLine).join('');
-    if (!lines) return '';
-    return '<article class="wreport-project"><h3>' + esc(project.name || '') + '</h3><div class="wreport-lines">' + lines + '</div></article>';
+    var blocks = project.blocks;
+    if (!blocks && project.lines) blocks = [{type: '制作', lines: project.lines}];
+    var body = reportBlocks(blocks);
+    if (!body) return '';
+    var status = project.status ? '<span class="wreport-project-status">' + esc(project.status) + '</span>' : '';
+    return '<article class="wreport-project"><h3 class="wreport-project-title"><span class="wreport-emoji">' + esc(project.emoji || '') + '</span><span class="wreport-name">' + esc(project.name || '') + '</span>' + status + '</h3>' + body + '</article>';
   }).join('');
 }
 function workReportSection(){
@@ -820,7 +839,11 @@ document.addEventListener('click', function(e){
     var view = b.dataset.view, url = new URL(location.href);
     if (view === 'week' && url.searchParams.has('month')) url.searchParams.set('view', 'home');
     url.hash = view === 'social' ? 'social-media' : view === 'delivery' ? 'delivery' : view === 'weekly-record' ? 'weekly-record' : view === 'weekly-work-report' ? 'weekly-work-report' : view === 'weekly-report' ? 'weekly-report' : '';
-    if (view === 'weekly-work-report') url.searchParams.set('week', monday(todayShanghai()));
+    if (view === 'weekly-work-report') {
+      var chosen = url.searchParams.get('week');
+      if (!chosen) url.searchParams.set('week', monday(todayShanghai()));
+      else if (validDate(chosen)) url.searchParams.set('week', monday(chosen));
+    }
     push(url); return;
   }
   if (b.id === 'refreshButton'){ location.reload(); return; }

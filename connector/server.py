@@ -8,6 +8,7 @@ import store
 INSTR = ('Ke（LanGui）的专业工作库：读写他的工作记录，网页 https://l7758092-jpg.github.io/langui-work/ 。'
          '规则：「今天」栏只显示计划日=今天的任务；完成要写完成日；改期只改计划日，原计划日自动保留；急事排前；不要编造记录，只记 Ke 说过的。'
          '每周工作汇报是独立记录，用 save_weekly_report、get_weekly_report、list_weekly_reports；周一为键，不要写进任务进展。'
+         '周报按块保存：制作、逐日进展、会议、拍摄/交付跟进。标签不能改称文案或素材，项目状态和 emoji 不要拼进名称。'
          '写操作会自动生成网页、跑测试、推送上线并核对，约 20–60 秒。时区 Asia/Shanghai。')
 mcp = FastMCP('LanGui 专业工作库', instructions=INSTR, stateless_http=True, json_response=True,
               transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
@@ -63,7 +64,7 @@ async def update_note(task: str, note: Optional[str] = None, next_step: Optional
 async def check_online() -> dict:
     return await _r(store.check_online)
 
-@mcp.tool(description='保存独立的每周工作汇报（写操作，走原有备份、生成、回归和发布，不改任务、不追加进展）。week 必须显式填写 YYYY-MM-DD，按 Asia/Shanghai 归到周一；同一周一再次保存只更新这一条，另起一周不会覆盖旧周。projects 与 followups 是项目列表。项目字段：name 项目名；track 为 general 或 education，教育类才可使用「脚本」「片尾」。lines 里每道工序单独一项，禁止拼成一段：emoji 行首符号，process 只能是文案、配音、素材、片头、字幕、横版、竖版，status 是这一周的状态，text 是这一周的具体内容。横版与竖版必须分成两项。这些标签是固定的，标签后的 status 和 text 只属于这一周，不要套用其他周的正文。followups 是「后续工作跟进」，结构与 projects 相同，可省略。')
+@mcp.tool(description='保存独立的每周工作汇报（写操作，走原有备份、生成、回归和发布，不改任务、不追加进展）。week 必须显式填写 YYYY-MM-DD，按 Asia/Shanghai 归到周一；同一周一再次保存只更新 projects 与 followups，并保留该周报对象上已有的其他元数据键；另起一周不会覆盖旧周。projects 是项目列表，followups 是「后续工作跟进」，可省略。每个项目单独填写 name、emoji、status（完成或进行等，禁止拼进 name）；track 默认 general，education 的制作块才可用脚本、片尾。blocks 按 type 分块，标签用 label，不可改名或合并：制作=文案、配音、素材、片头、字幕、横版、竖版（教育类另加脚本、片尾），横版与竖版必须各占一行；逐日进展=周一、周二、周三、剪辑、交片；会议=会议或周几上午/下午（如周二上午），每行 attendance 只能是已参加或待参加，text 必须写明 YYYY-MM-DD 或 M月D日，已参加和待参加各自成行；拍摄/交付跟进只放 followups，label=时间、到场、地点、人员、工作、拍摄、内容、素材截止、后续、交片。每行另有 emoji、可选 status、text。这些标签后的 status 和 text 只属于这一周。')
 async def save_weekly_report(week: str, projects: list, followups: Optional[list] = None) -> dict:
     return await _w(store.m_save_weekly_report, week, projects, followups)
 

@@ -1,8 +1,8 @@
 diff --git a/restore/src/app.html b/restore/src/app.html
-index 43cb9e1..b7d4922 100644
+index 43cb9e1..cf07661 100644
 --- a/restore/src/app.html
 +++ b/restore/src/app.html
-@@ -194,6 +194,25 @@ ul,ol{margin:0;padding:0;list-style:none}
+@@ -194,6 +194,31 @@ ul,ol{margin:0;padding:0;list-style:none}
  .weekly-speech-text{padding:16px 22px 20px;line-height:1.95;font-size:15px}
  .weekly-speech-text p+p{margin-top:10px}
  .speech-project{background:none;color:#b8860b;font-weight:700}
@@ -15,6 +15,12 @@ index 43cb9e1..b7d4922 100644
 +.wreport-jump[aria-current=page]{background:var(--acc-soft);border-color:var(--accent);font-weight:700}
 +.wreport-project{margin:14px 0;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:#fff}
 +.wreport-project h3{font-size:18px;font-weight:800;margin-bottom:4px}
++.wreport-project-title{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
++.wreport-name{font-weight:800}
++.wreport-project-status{font-size:13px;font-weight:700;color:var(--muted)}
++.wreport-block{margin-top:10px}
++.wreport-block>h4{font-size:15px;font-weight:800;margin:8px 0 0}
++.wreport-attendance h5{margin:8px 0 0;font-size:13px;font-weight:800;color:var(--muted)}
 +.wreport-line{display:block;padding:10px 0;border-top:1px solid var(--line)}
 +.wreport-lines>.wreport-line:first-child{border-top:0}
 +.wreport-line-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
@@ -28,7 +34,7 @@ index 43cb9e1..b7d4922 100644
  /* 按钮 */
  .work-link,.work-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--line2);background:linear-gradient(#ffffff,#f3f5f7);cursor:pointer;font-size:13px;white-space:nowrap}
  .work-link:hover,.work-button:hover{border-color:#9aa3ad}
-@@ -399,6 +418,7 @@ td>a[data-nav]{font-size:12px;color:var(--gold);font-weight:400}
+@@ -399,6 +424,7 @@ td>a[data-nav]{font-size:12px;color:var(--gold);font-weight:400}
      <button type="button" data-view="delivery" aria-pressed="false">成片交付安排</button>
      <button type="button" data-view="weekly-record" aria-pressed="false">本周做了什么</button>
      <button type="button" data-view="weekly-report" aria-pressed="false">整体汇报</button>
@@ -37,7 +43,7 @@ index 43cb9e1..b7d4922 100644
    <div id="workspace"></div>
  </main>
 diff --git a/restore/src/app.js b/restore/src/app.js
-index 9c76249..634927c 100644
+index 9c76249..2e40c38 100644
 --- a/restore/src/app.js
 +++ b/restore/src/app.js
 @@ -261,7 +261,7 @@ function uniq(a){ var s = {}, o = []; a.forEach(function(v){ if (!s[v]){ s[v] =
@@ -49,11 +55,11 @@ index 9c76249..634927c 100644
  function homeRequested(){ var p = params(); return !p.has('month') || p.get('view') === 'home'; }
  
  /* ── 渲染 ── */
-@@ -360,6 +360,52 @@ function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" dat
+@@ -360,6 +360,71 @@ function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" dat
  var WD = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
  var CN = ['一','二','三','四','五'];
  
-+/* 独立周报。工序标签固定；emoji、状态和正文来自 weeklyReports，不在这里写死某一周的句子。 */
++/* 独立周报。块和标签固定；项目状态、行状态和正文来自 weeklyReports，不在这里写死某一周的句子。 */
 +function weeklyReportRows(){
 +  var raw = BASE && BASE.weeklyReports;
 +  return Array.isArray(raw) ? raw : [];
@@ -63,19 +69,38 @@ index 9c76249..634927c 100644
 +  p.set('week', monday(day));
 +  return '?' + p.toString() + '#weekly-work-report';
 +}
-+function reportLine(line){
-+  if (!line || line.process == null || line.text == null || !String(line.text).trim()) return '';
-+  var process = String(line.process);
-+  var aspect = process === '横版' ? '16:9' : process === '竖版' ? '9:16' : '';
++function reportLine(line, blockType){
++  var label = line && (line.label != null ? line.label : line.process);
++  if (!line || label == null || line.text == null || !String(line.text).trim()) return '';
++  label = String(label);
++  var aspect = label === '横版' ? '16:9' : label === '竖版' ? '9:16' : '';
 +  var status = line.status ? '<span class="wreport-status">' + esc(line.status) + '</span>' : '';
 +  var ratio = aspect ? '<span class="wreport-aspect">' + aspect + '</span>' : '';
-+  return '<div class="wreport-line" data-process="' + esc(process) + '"><div class="wreport-line-head"><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(process) + '</strong>' + ratio + status + '</div><p class="wreport-text">' + esc(line.text) + '</p></div>';
++  var attendance = line.attendance ? ' data-attendance="' + esc(line.attendance) + '"' : '';
++  return '<div class="wreport-line" data-block="' + esc(blockType || '') + '" data-label="' + esc(label) + '"' + attendance + '><div class="wreport-line-head"><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(label) + '</strong>' + ratio + status + '</div><p class="wreport-text">' + esc(line.text) + '</p></div>';
++}
++function reportBlocks(blocks){
++  return (blocks || []).map(function(block){
++    var type = String(block && block.type || '');
++    var lines = block && block.lines || [];
++    var body = '';
++    if (type === '会议'){
++      body = ['已参加', '待参加'].map(function(kind){
++        var group = lines.filter(function(line){ return line && line.attendance === kind; }).map(function(line){ return reportLine(line, type); }).join('');
++        return group ? '<div class="wreport-attendance" data-attendance="' + kind + '"><h5>' + kind + '</h5><div class="wreport-lines">' + group + '</div></div>' : '';
++      }).join('');
++    } else body = '<div class="wreport-lines">' + lines.map(function(line){ return reportLine(line, type); }).join('') + '</div>';
++    return body ? '<section class="wreport-block" data-type="' + esc(type) + '"><h4>' + esc(type) + '</h4>' + body + '</section>' : '';
++  }).join('');
 +}
 +function reportProjects(list){
 +  return (list || []).map(function(project){
-+    var lines = (project.lines || []).map(reportLine).join('');
-+    if (!lines) return '';
-+    return '<article class="wreport-project"><h3>' + esc(project.name || '') + '</h3><div class="wreport-lines">' + lines + '</div></article>';
++    var blocks = project.blocks;
++    if (!blocks && project.lines) blocks = [{type: '制作', lines: project.lines}];
++    var body = reportBlocks(blocks);
++    if (!body) return '';
++    var status = project.status ? '<span class="wreport-project-status">' + esc(project.status) + '</span>' : '';
++    return '<article class="wreport-project"><h3 class="wreport-project-title"><span class="wreport-emoji">' + esc(project.emoji || '') + '</span><span class="wreport-name">' + esc(project.name || '') + '</span>' + status + '</h3>' + body + '</article>';
 +  }).join('');
 +}
 +function workReportSection(){
@@ -102,7 +127,7 @@ index 9c76249..634927c 100644
  /* work-controls.tsx → Weekly */
  function weekly(view, home){
    var rows = M.rows, today = M.today;
-@@ -496,6 +542,7 @@ function weekly(view, home){
+@@ -496,6 +561,7 @@ function weekly(view, home){
      out += '<section class="planner-group weekly-recap weekly-report-panel"><div class="recap-toggle"><span>整体汇报</span><small>' + weekTitle + ' · ' + range + '</small></div><div class="weekly-speech"><div class="weekly-speech-header"><div class="speech-heading"><span>周会 · 工作汇报</span><h3>整体汇报词</h3></div><button class="work-link" aria-live="polite" data-act="copy-speech">' + (ui.speechCopied ? '已复制' : '复制汇报词') + '</button></div><div class="weekly-speech-text">' +
        speech.text.split('\n\n').map(function(p){ return '<p>' + speech.emphasize(p) + '</p>'; }).join('') + '</div></div><p role="alert">' + esc(ui.error) + '</p></section>';
    }
@@ -110,13 +135,17 @@ index 9c76249..634927c 100644
    if (view === 'week') out += monthLedger(home);
    return out;
  }
-@@ -772,7 +819,8 @@ document.addEventListener('click', function(e){
+@@ -772,7 +838,12 @@ document.addEventListener('click', function(e){
    if (b.dataset.view){
      var view = b.dataset.view, url = new URL(location.href);
      if (view === 'week' && url.searchParams.has('month')) url.searchParams.set('view', 'home');
 -    url.hash = view === 'social' ? 'social-media' : view === 'delivery' ? 'delivery' : view === 'weekly-record' ? 'weekly-record' : view === 'weekly-report' ? 'weekly-report' : '';
 +    url.hash = view === 'social' ? 'social-media' : view === 'delivery' ? 'delivery' : view === 'weekly-record' ? 'weekly-record' : view === 'weekly-work-report' ? 'weekly-work-report' : view === 'weekly-report' ? 'weekly-report' : '';
-+    if (view === 'weekly-work-report') url.searchParams.set('week', monday(todayShanghai()));
++    if (view === 'weekly-work-report') {
++      var chosen = url.searchParams.get('week');
++      if (!chosen) url.searchParams.set('week', monday(todayShanghai()));
++      else if (validDate(chosen)) url.searchParams.set('week', monday(chosen));
++    }
      push(url); return;
    }
    if (b.id === 'refreshButton'){ location.reload(); return; }
