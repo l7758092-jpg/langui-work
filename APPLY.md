@@ -41,6 +41,16 @@ patch -p1 --dry-run -i /path/to/patches/connector.patch
 - `add_progress`、`reschedule`、`mark_done` 不改要求，也不改 `note`。
 - `?edit=1` 只写入这台浏览器的 `localStorage`，不是共享录入。
 
+## 每周工作汇报
+
+周报放在 `data.json` 的 `weeklyReports`，不写入 `tasks`。旧文件没有这个键时，读取结果为空，任务写操作不会补一个空键。键是 `Asia/Shanghai` 的周一：`2026-01-01` 归到 `2025-12-29`。同一周一再次保存只更新这一条；保存另一周不覆盖已有周。
+
+工序标签固定为「文案、配音、素材、片头、字幕、横版、竖版」。`track` 为 `education` 时可以再使用「脚本、片尾」。横版显示 16:9，竖版显示 9:16，两项必须分开。`emoji`、`status`、`text` 按周变化，页面不写死某一周的正文。后续事项放在 `followups`，页面标题为「后续工作跟进」。
+
+stdio 工具：`save_weekly_report`、`get_weekly_report`、`list_weekly_reports`。`save_weekly_report` 仍走原来的 `mutate`（同一把写锁、备份、生成、`flow.test.js` 与 `migrate.test.js`、只发布 index）。仓库里的合成测试不替换这两项回归。连接器进程换上新的 `server.py` 之后，要用官方的 MCP 重连刷新工具 schema；本地跑测试不等于插件已经露出新工具。
+
+页面入口是「本周工作汇报」，深链接形如 `?week=YYYY-MM-DD#weekly-work-report`。原来的「本周做了什么」和「整体汇报」保留。不要把真实周报正文写进仓库、测试或提交说明。
+
 ## 本机验证后再发布
 
 1. 复制源码后重启连接器进程，使新工具参数生效。不要用生产数据先跑写操作。

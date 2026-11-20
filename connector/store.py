@@ -211,6 +211,148 @@ def m_update_note(data, task, note=None, next_step=None, deadline=None, date_tex
     if not ch: raise ValueError('没有要改的内容')
     return t, f"已更新「{t['title']}」的" + '、'.join(ch)
 
+# ── 独立周报：标签固定，正文和状态按周存放，不写入任务 ──
+GENERAL_PROCESSES = ('文案', '配音', '素材', '片头', '字幕', '横版', '竖版')
+EDUCATION_PROCESSES = GENERAL_PROCESSES + ('脚本', '片尾')
+ASPECT_RATIO = {'横版': '16:9', '竖版': '9:16'}
+
+def now_iso():
+    return datetime.datetime.now(TZ).replace(microsecond=0).isoformat()
+
+def explicit_monday(day):
+    """周报必须带显式日期，再按 Asia/Shanghai 的日历归到周一。空日期不能偷偷落到今天。"""
+    raw = (day or '').strip()
+    if not raw: raise ValueError('请显式填写周报所属日期 YYYY-MM-DD，将按 Asia/Shanghai 归到周一')
+    if not valid(raw): raise ValueError(f'周报日期格式应为 YYYY-MM-DD：{raw}')
+    return monday(raw)
+
+def _coerce_list(value, name):
+    if isinstance(value, str):
+        text = value.strip()
+        if not text: return []
+        try: value = json.loads(text)
+        except Exception: raise ValueError(f'{name}须为列表')
+    if value is None: return []
+    if not isinstance(value, list): raise ValueError(f'{name}须为列表')
+    return value
+
+def _clean_plain(value, name, limit, allow_break=False):
+    if not isinstance(value, str): raise ValueError(f'{name}须为文字')
+    text = value.replace('\r\n', '\n').strip()
+    if not text: raise ValueError(f'{name}不能为空')
+    if not allow_break and '\n' in text: raise ValueError(f'{name}须为一行')
+    if len(text) > limit: raise ValueError(f'{name}请少于 {limit} 字')
+    return text
+
+def _clean_emoji(value):
+    emoji = _clean_plain(value, '行首符号', 8)
+    if any(ch in emoji for ch in '<>&'): raise ValueError('行首符号不能包含标记')
+    return emoji
+
+def _clean_status(value):
+    if value is None or value == '': return None
+    return _clean_plain(value, '状态', 24)
+
+def _clean_line(line, allowed):
+    if not isinstance(line, dict): raise ValueError('工序须为结构化字段')
+    process = line.get('process')
+    if not isinstance(process, str) or process.strip() not in allowed:
+        raise ValueError('工序标签只能是：' + '、'.join(allowed))
+    process = process.strip()
+    item = {'emoji': _clean_emoji(line.get('emoji')), 'process': process, 'text': _clean_plain(line.get('text'), '工序内容', 2000, allow_break=True)}
+    status = _clean_status(line.get('status'))
+    if status: item['status'] = status
+    if process in ASPECT_RATIO: item['aspect'] = ASPECT_RATIO[process]
+    return item
+
+def _clean_projects(items, label):
+    if len(items) > 40: raise ValueError(f'{label}项目过多')
+    out = []
+    for item in items:
+        if not isinstance(item, dict): raise ValueError('项目须为结构化字段')
+        name = _clean_plain(item.get('name'), '项目名称', 80)
+        track = item.get('track') or 'general'
+        if not isinstance(track, str): raise ValueError('项目类型须为文字')
+        track = track.strip() or 'general'
+        if track not in ('general', 'education'): raise ValueError('项目类型只能是 general 或 education')
+        allowed = EDUCATION_PROCESSES if track == 'education' else GENERAL_PROCESSES
+        lines_in = item.get('lines')
+        if not isinstance(lines_in, list) or not lines_in: raise ValueError(f'「{name}」至少要有一道工序')
+        if len(lines_in) > len(allowed): raise ValueError(f'「{name}」工序过多')
+        seen, lines = set(), []
+        for line in lines_in:
+            cleaned = _clean_line(line, allowed)
+            if cleaned['process'] in seen: raise ValueError(f'「{name}」的{cleaned["process"]}重复，横版和竖版以及其他工序都要各自单独一项')
+            seen.add(cleaned['process']); lines.append(cleaned)
+        out.append({'name': name, 'track': track, 'lines': lines})
+    return out
+
+def _report_rows(data):
+    if 'weeklyReports' not in data or data['weeklyReports'] is None: return []
+    rows = data['weeklyReports']
+    if not isinstance(rows, list): raise ValueError('weeklyReports 须为列表')
+    return rows
+
+def _present_report(report):
+    week = report['week']; end = shift(week, 6)
+    return {'周': week, '周一': week, '周日': end, '时区': 'Asia/Shanghai', '更新': report.get('updatedAt'),
+            '项目': report.get('projects') or [], '后续工作跟进': report.get('followups') or []}
+
+def _same_body(report, projects, followups):
+    return (report.get('projects') or []) == projects and (report.get('followups') or []) == followups
+
+def m_save_weekly_report(data, week, projects, followups=None):
+    """只替换本周一这条周报。不改 tasks、social、platforms，也不追加进展。"""
+    week = explicit_monday(week); end = shift(week, 6)
+    projects = _clean_projects(_coerce_list(projects, '项目'), '项目')
+    followups = _clean_projects(_coerce_list(followups, '后续工作跟进'), '后续工作跟进')
+    if not projects and not followups: raise ValueError('没有要保存的汇报内容')
+    rows = data.get('weeklyReports', None)
+    if rows is None: rows = []
+    elif not isinstance(rows, list): raise ValueError('weeklyReports 须为列表，已停止保存以免覆盖其他数据')
+    matches = [i for i, row in enumerate(rows) if isinstance(row, dict) and row.get('week') == week]
+    if len(matches) == 1 and _same_body(rows[matches[0]], projects, followups):
+        return {'kind': 'weekly-report', 'report': _present_report(rows[matches[0]])}, f'{label(week)} ~ {label(end)} 的工作汇报内容相同，未重复创建'
+    stored = {'week': week, 'timezone': 'Asia/Shanghai', 'updatedAt': now_iso(), 'projects': projects, 'followups': followups}
+    if matches:
+        rows[matches[0]] = stored
+        for i in reversed(matches[1:]): del rows[i]
+        msg = f'已更新 {label(week)} ~ {label(end)} 的工作汇报，其他周和任务未改'
+    else:
+        rows.append(stored)
+        rows.sort(key=lambda row: str(row.get('week') or ''))
+        msg = f'已保存 {label(week)} ~ {label(end)} 的工作汇报，未写入任务'
+    data['weeklyReports'] = rows
+    return {'kind': 'weekly-report', 'report': _present_report(stored)}, msg
+
+def get_weekly_report(week=None):
+    data = load()
+    raw = (week or '').strip()
+    day = need_day(raw, '周') if raw else today()
+    week, end = monday(day), shift(monday(day), 6)
+    found = next((row for row in _report_rows(data) if isinstance(row, dict) and row.get('week') == week), None)
+    res = {'周': week, '周一': week, '周日': end, '时区': 'Asia/Shanghai', '范围': f'{label(week)} ~ {label(end)}', '有记录': bool(found)}
+    if not found:
+        res['空态'] = f'{week} 至 {end} 没有工作汇报'
+        res['项目'] = []
+        res['后续工作跟进'] = []
+        return res
+    shown = _present_report(found)
+    res['更新'] = shown['更新']; res['项目'] = shown['项目']; res['后续工作跟进'] = shown['后续工作跟进']
+    return res
+
+def list_weekly_reports():
+    data = load(); seen, items = set(), []
+    for row in _report_rows(data):
+        if not isinstance(row, dict) or not valid(str(row.get('week') or '')): continue
+        week = row['week']
+        if monday(week) != week or week in seen: continue
+        seen.add(week)
+        items.append({'周': week, '周一': week, '周日': shift(week, 6), '时区': 'Asia/Shanghai',
+                      '更新': row.get('updatedAt'), '项目数': len(row.get('projects') or [])})
+    items.sort(key=lambda item: item['周'])
+    return {'时区': 'Asia/Shanghai', '周报': items}
+
 # ── 流水线 ──
 def _run(cmd, cwd=None, timeout=300):
     p = subprocess.run(cmd, cwd=cwd, env=ENV, capture_output=True, text=True, timeout=timeout)
@@ -259,6 +401,15 @@ def _write_atomic(path, content):
     with open(tmp, 'w', encoding='utf-8') as f: f.write(content)
     os.replace(tmp, path)
 
+def _write_result(payload, msg, changed):
+    """任务写操作仍返回「任务」。周报不是任务，只返回「周报」。"""
+    note = msg if changed else msg + '（数据没有变化）'
+    if isinstance(payload, dict) and payload.get('kind') == 'weekly-report' and 'id' not in payload:
+        return {'ok': True, '结果': note, '周报': payload.get('report')}
+    res = {'ok': True, '结果': note}
+    if changed: res['任务'] = brief(payload, lambda d: True)
+    return res
+
 def mutate(fn, *a, **kw):
     """备份 → 修改 → build → 测试（失败回滚）→ 推送 → 核对线上 → 备份到 store。串行加锁。"""
     with _tlock, open(LOCK, 'w') as lk:
@@ -269,8 +420,8 @@ def mutate(fn, *a, **kw):
         bak = f'{BACKUP_DIR}/data-{stamp}.json'; _write_atomic(bak, old_data)
         for f in sorted(os.listdir(BACKUP_DIR))[:-60]: os.remove(os.path.join(BACKUP_DIR, f))  # 只留最近 60 份
         data = json.loads(old_data); before = copy.deepcopy(data)
-        task, msg = fn(data, *a, **kw)
-        if data == before: return {'ok': True, '结果': msg + '（数据没有变化）'}
+        payload, msg = fn(data, *a, **kw)
+        if data == before: return _write_result(payload, msg, False)
         def rollback():
             _write_atomic(DATA, old_data)
             with open(HTML, 'wb') as f: f.write(old_html)
@@ -283,7 +434,7 @@ def mutate(fn, *a, **kw):
                 if rc: raise RuntimeError(f'测试 {os.path.basename(t)} 没通过：' + out)
         except Exception as e:
             rollback(); raise RuntimeError(f'{e}\n已回滚，数据没有改动。') from None
-        res = {'ok': True, '结果': msg, '任务': brief(task, lambda d: True)}
+        res = _write_result(payload, msg, True)
         if PUBLISH:
             try:
                 changed, want = publish(f'{today()[5:].replace("-", "/")} {msg}'[:120])
