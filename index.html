@@ -101,9 +101,9 @@ ul,ol{margin:0;padding:0;list-style:none}
 .week-status-group h4 span{color:var(--rec);font-size:10px}.week-status-group.is-done h4 span{color:var(--ok2);font-size:13px}
 .week-status-group h4 small{margin-left:auto;font-family:var(--mono);font-weight:400;color:var(--muted)}
 .planner-week-list{flex:1;min-height:0;overflow:auto;padding:0 10px;overflow-anchor:none}
-.planner-week-list li{padding:0;border-bottom:0}
+.planner-week-list>li{padding:0;border-bottom:0}
 .week-item-btn{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;width:100%;padding:8px 1px;border:0;border-bottom:1px dashed var(--line);background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:13px;line-height:1.45;color:inherit}
-.planner-week-list li:last-child .week-item-btn{border-bottom:0}
+.planner-week-list>li:last-child .week-item-btn{border-bottom:0}
 .week-item-btn:hover{background:var(--acc-soft)}
 .planner-week-list strong{font-weight:600;overflow-wrap:anywhere}
 .planner-week-list small{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
@@ -164,9 +164,9 @@ ul,ol{margin:0;padding:0;list-style:none}
 .video-stage-skipped{opacity:.55}
 /* 今天 / 昨天 */
 .daily-list,.yesterday-list{flex:1;min-height:0;overflow:auto;overflow-anchor:none}
-.daily-list li,.yesterday-list li{position:relative;padding:8px 0 8px 16px;border-bottom:1px dashed var(--line);font-size:14px;min-width:0;max-width:100%}
-.daily-list li:before,.yesterday-list li:before{content:"";position:absolute;left:2px;top:15px;width:7px;height:7px;border-radius:50%;border:2px solid var(--accent)}
-.daily-list p,.yesterday-list p{margin-top:3px;color:var(--muted);font-size:13px}
+.daily-list>li,.yesterday-list>li{position:relative;padding:8px 0 8px 16px;border-bottom:1px dashed var(--line);font-size:14px;min-width:0;max-width:100%}
+.daily-list>li:before,.yesterday-list>li:before{content:"";position:absolute;left:2px;top:15px;width:7px;height:7px;border-radius:50%;border:2px solid var(--accent)}
+.daily-list>li>p,.yesterday-list>li>p{margin-top:3px;color:var(--muted);font-size:13px}
 .day-line{display:grid;grid-template-columns:64px minmax(0,1fr);gap:6px;margin-top:4px;color:var(--ink);font-size:13px}
 .day-line span{color:var(--dim);font-size:11px}
 .day-history{margin-top:4px;color:var(--muted);font-size:12px}
@@ -351,7 +351,14 @@ td>a[data-nav]{font-size:12px;color:var(--gold);font-weight:400}
 .inline-detail .inline-timeline p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:13px;line-height:1.6;color:var(--ink)}
 .inline-actions{display:flex;justify-content:flex-end;margin-top:8px}
 .planner-card.is-expanded>h4,.is-expanded>.day-item-top>strong{display:block;-webkit-line-clamp:unset;overflow:visible}
-.planner-week-list li{min-width:0;max-width:100%}
+.is-expanded>.planner-preview,
+.is-expanded>.planner-oneline,
+.is-expanded>.planner-dates,
+.is-expanded>.day-key,
+.is-expanded>.planner-foot .planner-hints,
+.is-expanded>.planner-foot .detail-open{display:none}
+.is-expanded>.planner-foot:not(:has(.work-link:not(.detail-open))){display:none}
+.planner-week-list>li{min-width:0;max-width:100%}
 /* 响应式 */
 @media(max-width:860px){.ledger-filter{grid-template-columns:repeat(3,minmax(0,1fr))}.ledger-filter input[type=search],.ledger-filter button{grid-column:1/-1;width:100%}}
 @media(max-width:720px){
