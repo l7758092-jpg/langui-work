@@ -361,6 +361,49 @@ assert(html.includes('id="workDialog"'));
   assert.equal(weekClosed.text, false);
   console.log('✓ 昨天区分当天进展与当前进度；本周工作内容在行下原地展开并可收起');
 
+  const polish = (sel, title) => page.evaluate((s, t) => {
+    const li = [...document.querySelectorAll(s + ' > li')].find((el) => el.querySelector(':scope > .day-item-top strong') && el.querySelector(':scope > .day-item-top strong').textContent === t);
+    const preview = li.querySelector(':scope > .planner-preview');
+    return {
+      expanded: li.classList.contains('is-expanded'),
+      rows: [...li.querySelectorAll('.inline-timeline li')].map((row) => ({ content: getComputedStyle(row, '::before').content, paddingLeft: getComputedStyle(row).paddingLeft })),
+      preview: preview ? getComputedStyle(preview).display : 'missing',
+      rects: preview ? preview.getClientRects().length : 0,
+      foot: getComputedStyle(li.querySelector('.planner-foot')).display,
+      footBtn: getComputedStyle(li.querySelector('.planner-foot .detail-open')).display
+    };
+  }, sel, title);
+  await page.evaluate(() => {
+    const open = (sel, title) => {
+      const li = [...document.querySelectorAll(sel + ' > li')].find((el) => el.querySelector(':scope > .day-item-top strong').textContent === title);
+      if (!li.classList.contains('is-expanded')) li.querySelector('.planner-foot .detail-open').click();
+    };
+    open('.daily-list', '合成重点甲');
+    open('.yesterday-list', '合成昨天重点');
+  });
+  const todayPolish = await polish('.daily-list', '合成重点甲');
+  const yPolish = await polish('.yesterday-list', '合成昨天重点');
+  for (const pack of [todayPolish, yPolish]) {
+    assert.equal(pack.expanded, true);
+    assert(pack.rows.length > 0);
+    pack.rows.forEach((row) => { assert.equal(row.content, 'none'); assert.equal(row.paddingLeft, '8px'); });
+    assert.equal(pack.preview, 'none');
+    assert.equal(pack.rects, 0);
+    assert.equal(pack.foot, 'none');
+    assert.equal(pack.footBtn, 'none');
+  }
+  await page.evaluate(() => document.querySelector('.daily-list .is-expanded .inline-collapse-top').click());
+  const todayBack = await polish('.daily-list', '合成重点甲');
+  assert.equal(todayBack.expanded, false);
+  assert.notEqual(todayBack.preview, 'none');
+  assert(todayBack.rects > 0);
+  await page.evaluate(() => document.querySelector('.yesterday-list .is-expanded .inline-actions .detail-open').click());
+  const yBack = await polish('.yesterday-list', '合成昨天重点');
+  assert.equal(yBack.expanded, false);
+  assert.notEqual(yBack.preview, 'none');
+  assert(yBack.rects > 0);
+  console.log('✓ 展开区无橙色圆点，折叠预览在展开时隐藏，顶部和底部收起都能恢复');
+
   await page.focus('.planner-card .planner-card-actions .detail-open');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('.planner-card.is-expanded'));
@@ -373,6 +416,20 @@ assert(html.includes('id="workDialog"'));
   await open('?today=2026-11-18&edit=1&view=home');
   await page.evaluate(() => document.querySelector('.planner-card-actions .detail-open').click());
   assert.equal(await page.evaluate(() => document.querySelector('.planner-card.is-expanded') && document.querySelectorAll('dialog[open]').length), 0);
+  const editKeep = await page.evaluate(() => {
+    const card = document.querySelector('.planner-card.is-expanded');
+    const edit = card.querySelector('.planner-foot .work-link:not(.detail-open)');
+    return {
+      edit: edit ? getComputedStyle(edit).display : 'missing',
+      foot: getComputedStyle(card.querySelector('.planner-foot')).display,
+      footBtn: getComputedStyle(card.querySelector('.planner-foot .detail-open')).display,
+      preview: getComputedStyle(card.querySelector(':scope > .planner-preview')).display
+    };
+  });
+  assert.notEqual(editKeep.edit, 'none');
+  assert.notEqual(editKeep.foot, 'none');
+  assert.equal(editKeep.footBtn, 'none');
+  assert.equal(editKeep.preview, 'none');
   await page.evaluate(() => document.querySelector('[data-edit="101"]').click());
   await page.waitForSelector('#workForm textarea[name=requirements]');
   assert.equal(await page.evaluate(() => document.querySelectorAll('dialog[open]').length), 1);
