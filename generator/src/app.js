@@ -261,7 +261,7 @@ function uniq(a){ var s = {}, o = []; a.forEach(function(v){ if (!s[v]){ s[v] = 
 function params(){ return new URLSearchParams(location.search); }
 function push(url){ try { history.pushState(null, '', url); } catch (e) { fallbackUrl = String(url); } render(); }
 var fallbackUrl = null;
-function activeView(){ var h = location.hash; return h === '#social-media' ? 'social' : h === '#delivery' ? 'delivery' : h === '#weekly-record' ? 'weekly-record' : h === '#weekly-report' ? 'weekly-report' : 'week'; }
+function activeView(){ var h = location.hash; return h === '#social-media' ? 'social' : h === '#delivery' ? 'delivery' : h === '#weekly-record' ? 'weekly-record' : h === '#weekly-work-report' ? 'weekly-work-report' : h === '#weekly-report' ? 'weekly-report' : 'week'; }
 function homeRequested(){ var p = params(); return !p.has('month') || p.get('view') === 'home'; }
 
 /* ── 渲染 ── */
@@ -359,6 +359,71 @@ function focusPreview(r, mode, day, ev){
 function archiveLink(href, text, attrs){ return '<a href="' + esc(href) + '" data-nav="link"' + (attrs || '') + '>' + text + '</a>'; }
 var WD = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
 var CN = ['一','二','三','四','五'];
+
+/* 独立周报。块和标签固定；项目状态、行状态和正文来自 weeklyReports，不在这里写死某一周的句子。 */
+function weeklyReportRows(){
+  var raw = BASE && BASE.weeklyReports;
+  return Array.isArray(raw) ? raw : [];
+}
+function reportHref(day){
+  var p = params();
+  p.set('week', monday(day));
+  return '?' + p.toString() + '#weekly-work-report';
+}
+function reportLine(line, blockType){
+  var label = line && (line.label != null ? line.label : line.process);
+  if (!line || label == null || line.text == null || !String(line.text).trim()) return '';
+  label = String(label);
+  var aspect = label === '横版' ? '16:9' : label === '竖版' ? '9:16' : '';
+  var status = line.status ? '<span class="wreport-status">' + esc(line.status) + '</span>' : '';
+  var ratio = aspect ? '<span class="wreport-aspect">' + aspect + '</span>' : '';
+  var attendance = line.attendance ? ' data-attendance="' + esc(line.attendance) + '"' : '';
+  return '<div class="wreport-line" data-block="' + esc(blockType || '') + '" data-label="' + esc(label) + '"' + attendance + '><span class="wreport-emoji">' + esc(line.emoji || '') + '</span><strong>' + esc(label) + '</strong>' + status + ratio + '<span class="wreport-colon">：</span><span class="wreport-text">' + esc(line.text) + '</span></div>';
+}
+function reportBlocks(blocks){
+  return (blocks || []).map(function(block){
+    var type = String(block && block.type || '');
+    var lines = block && block.lines || [];
+    if (type === '会议'){
+      return ['已参加', '待参加'].map(function(kind){
+        var group = lines.filter(function(line){ return line && line.attendance === kind; }).map(function(line){ return reportLine(line, type); }).join('');
+        return group ? '<div class="wreport-attendance" data-attendance="' + kind + '"><h5>' + kind + '</h5><div class="wreport-lines">' + group + '</div></div>' : '';
+      }).join('');
+    }
+    var body = lines.map(function(line){ return reportLine(line, type); }).join('');
+    return body ? '<div class="wreport-lines" data-type="' + esc(type) + '">' + body + '</div>' : '';
+  }).join('');
+}
+function reportProjects(list){
+  return (list || []).map(function(project){
+    var blocks = project.blocks;
+    if (!blocks && project.lines) blocks = [{type: '制作', lines: project.lines}];
+    var body = reportBlocks(blocks);
+    if (!body) return '';
+    var status = project.status ? '<span class="wreport-project-status">' + esc(project.status) + '</span>' : '';
+    return '<article class="wreport-project"><h3 class="wreport-project-title"><span class="wreport-name">' + esc(project.name || '') + '</span><span class="wreport-emoji">' + esc(project.emoji || '') + '</span>' + status + '</h3>' + body + '</article>';
+  }).join('');
+}
+function workReportSection(){
+  var wq = params().get('week');
+  if (wq && !validDate(wq)) return '<section class="wreport" id="weekly-work-report" data-state="invalid"><h2>工作汇报</h2><p class="wreport-empty">日期无效，没有改用其他周。</p></section>';
+  var week = wq ? monday(wq) : monday(M.today);
+  var end = shift(week, 6);
+  var saved = weeklyReportRows().filter(function(row){ return row && validDate(row.week) && monday(row.week) === row.week; });
+  var report = null;
+  saved.forEach(function(row){ if (row.week === week) report = row; });
+  var prev = shift(week, -7), next = shift(week, 7);
+  var jumps = saved.map(function(row){ return row.week; }).filter(function(day, index, all){ return all.indexOf(day) === index; }).sort();
+  var nav = '<nav class="wreport-nav" aria-label="历史工作汇报"><a class="wreport-jump" data-nav="link" href="' + esc(reportHref(prev)) + '">上一周 ' + esc(prev) + '</a><a class="wreport-jump" data-nav="link" href="' + esc(reportHref(next)) + '">下一周 ' + esc(next) + '</a>' +
+    jumps.map(function(day){ return '<a class="wreport-jump" data-nav="link" href="' + esc(reportHref(day)) + '"' + (day === week ? ' aria-current="page"' : '') + '>' + esc(day) + '</a>'; }).join('') + '</nav>';
+  var head = '<header><h2>工作汇报</h2><p class="wreport-range"><time datetime="' + week + '">' + esc(formatShanghai(week)) + '</time> 至 <time datetime="' + end + '">' + esc(formatShanghai(end)) + '</time></p><p class="wreport-tz">Asia/Shanghai</p></header>' + nav;
+  if (!report) return '<section class="wreport" id="weekly-work-report" data-state="empty" data-week="' + week + '" data-end="' + end + '">' + head + '<p class="wreport-empty">' + esc(formatShanghai(week)) + '至' + esc(formatShanghai(end)) + '还没有工作汇报。</p></section>';
+  var done = reportProjects(report.projects);
+  var laterLines = reportProjects(report.followups);
+  var later = laterLines || '<p class="wreport-empty">没有后续跟进</p>';
+  return '<section class="wreport" id="weekly-work-report" data-state="ready" data-week="' + week + '" data-end="' + end + '">' + head +
+    '<div class="wreport-done">' + done + '</div><h2 class="wreport-follow">后续工作跟进</h2><div class="wreport-later">' + later + '</div></section>';
+}
 
 /* work-controls.tsx → Weekly */
 function weekly(view, home){
@@ -496,6 +561,7 @@ function weekly(view, home){
     out += '<section class="planner-group weekly-recap weekly-report-panel"><div class="recap-toggle"><span>整体汇报</span><small>' + weekTitle + ' · ' + range + '</small></div><div class="weekly-speech"><div class="weekly-speech-header"><div class="speech-heading"><span>周会 · 工作汇报</span><h3>整体汇报词</h3></div><button class="work-link" aria-live="polite" data-act="copy-speech">' + (ui.speechCopied ? '已复制' : '复制汇报词') + '</button></div><div class="weekly-speech-text">' +
       speech.text.split('\n\n').map(function(p){ return '<p>' + speech.emphasize(p) + '</p>'; }).join('') + '</div></div><p role="alert">' + esc(ui.error) + '</p></section>';
   }
+  if (view === 'weekly-work-report') out += workReportSection();
   if (view === 'week') out += monthLedger(home);
   return out;
 }
@@ -772,7 +838,12 @@ document.addEventListener('click', function(e){
   if (b.dataset.view){
     var view = b.dataset.view, url = new URL(location.href);
     if (view === 'week' && url.searchParams.has('month')) url.searchParams.set('view', 'home');
-    url.hash = view === 'social' ? 'social-media' : view === 'delivery' ? 'delivery' : view === 'weekly-record' ? 'weekly-record' : view === 'weekly-report' ? 'weekly-report' : '';
+    url.hash = view === 'social' ? 'social-media' : view === 'delivery' ? 'delivery' : view === 'weekly-record' ? 'weekly-record' : view === 'weekly-work-report' ? 'weekly-work-report' : view === 'weekly-report' ? 'weekly-report' : '';
+    if (view === 'weekly-work-report') {
+      var chosen = url.searchParams.get('week');
+      if (!chosen) url.searchParams.set('week', monday(todayShanghai()));
+      else if (validDate(chosen)) url.searchParams.set('week', monday(chosen));
+    }
     push(url); return;
   }
   if (b.id === 'refreshButton'){ location.reload(); return; }
